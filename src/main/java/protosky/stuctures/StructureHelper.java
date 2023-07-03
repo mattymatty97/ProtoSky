@@ -29,316 +29,357 @@ import net.minecraft.world.Heightmap;
 import net.minecraft.world.StructureWorldAccess;
 import net.minecraft.world.WorldAccess;
 import net.minecraft.world.biome.Biome;
+import net.minecraft.world.biome.GenerationSettings;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.gen.GenerationStep;
 import net.minecraft.world.gen.StructureAccessor;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
+import net.minecraft.world.gen.feature.ConfiguredFeature;
+import net.minecraft.world.gen.feature.FeaturePlacementContext;
 import net.minecraft.world.gen.feature.PlacedFeature;
 import net.minecraft.world.gen.feature.util.PlacedFeatureIndexer;
+import net.minecraft.world.gen.placementmodifier.PlacementModifier;
 import net.minecraft.world.gen.structure.Structure;
+import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import protosky.mixins.PlacedFeatureAccessor;
 import protosky.mixins.StructureHelperInvokers.*;
 import protosky.mixins.StructurePieceAccessor;
 
 import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static protosky.ProtoSkySettings.LOGGER;
 
 public class StructureHelper {
     @FunctionalInterface
-    public interface ManyArgumentFunction<ReturnType, Arg1Type, Arg2Type, Arg3Type, Arg4Type, Arg5Type, Arg6Type, Arg7Type, Arg8Type, Arg9Type> {
+    public interface NineArgumentFunction<ReturnType, Arg1Type, Arg2Type, Arg3Type, Arg4Type, Arg5Type, Arg6Type, Arg7Type, Arg8Type, Arg9Type> {
         ReturnType apply(Arg1Type arg1, Arg2Type arg2, Arg3Type arg3, Arg4Type arg4, Arg5Type arg5, Arg6Type arg6, Arg7Type arg7, Arg8Type arg8, Arg9Type arg9);
     }
 
-    public static boolean ran = false;
-    private static final List<Pair<Structure, ManyArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>>> structures = new ArrayList<>();
-    private static final List<Pair<Structure, ManyArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>>> beforeDeleteStructures = new ArrayList<>();
+    @FunctionalInterface
+    public interface SixArgumentFunction<ReturnType, Arg1Type, Arg2Type, Arg3Type, Arg4Type, Arg5Type, Arg6Type> {
+        ReturnType apply(Arg1Type arg1, Arg2Type arg2, Arg3Type arg3, Arg4Type arg4, Arg5Type arg5, Arg6Type arg6);
+    }
 
-    //This function registers all the structure handlers that get called in handleStructureStart(). The format of a handler
+    private interface FeaturesHandlerType extends SixArgumentFunction<Boolean, StructureWorldAccess, ChunkGenerator, Random, BlockPos, Chunk, PlacedFeature> {}
+
+    public static boolean ran = false;
+    private static final List<Pair<Structure, NineArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>>> structuresAfterDelete = new ArrayList<>();
+    private static final List<Pair<Structure, NineArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>>> structuresBeforeDelete = new ArrayList<>();
+
+    //private static final List<Pair<Structure, SixArgumentFunction<Boolean, StructureWorldAccess, ChunkGenerator, Random, BlockPos, Chunk, PlacedFeature>>> featuresAfterDelete = new ArrayList<>();
+    private static final List<Pair<Identifier, FeaturesHandlerType>> featuresAfterDelete = new ArrayList<>();
+
+    //These functions register all the structure handlers that get called in handleStructureStart(). The format of a handler
     // is a pair of a Registry<Structure> that has the structure to run on and a function that will get called on when
     // that structure is found. Its arguments are the ones that StructurePiece.generate() would get plus the current chunk.
     // If it returns true then StructurePiece.generate() is called. If false it is not ran. This is a function and not static
     // because in singleplayer the Registry<Structure> changes every time you change worlds causing it to fail if two worlds
     // are loading in one session. It gets called by TAGS_LOADED event in fixWorldLoads.java.
-    private static synchronized void fixRaceCondition(WorldAccess world) {
-        if (!ran) {
-            Registry<Structure> structureRegistry = world.getRegistryManager().get(RegistryKeys.STRUCTURE);
+    private static void registerStructuresAfterDelete(WorldAccess world) {
+        Registry<Structure> structureRegistry = world.getRegistryManager().get(RegistryKeys.STRUCTURE);
 
-            //All of these are mostly copied verbatim from their Generator class (net.minecraft.structure.<structure name>Generator)
-            // with minor changes to use Accessors and Invokers. Some are also refactored for readability.
-            structures.clear();
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("stronghold")),
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
-                        if (structurePiece instanceof StrongholdGenerator.PortalRoom) {
+        //All of these are mostly copied verbatim from their Generator class (net.minecraft.structure.<structure name>Generator)
+        // with minor changes to use Accessors and Invokers. Some are also refactored for readability.
+        structuresAfterDelete.clear();
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("stronghold")),
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
+                    if (structurePiece instanceof StrongholdGenerator.PortalRoom) {
 
-                            BlockState northFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.NORTH);
-                            BlockState southFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.SOUTH);
-                            BlockState eastFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.EAST);
-                            BlockState westFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.WEST);
+                        BlockState northFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.NORTH);
+                        BlockState southFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.SOUTH);
+                        BlockState eastFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.EAST);
+                        BlockState westFrame = Blocks.END_PORTAL_FRAME.getDefaultState().with(EndPortalFrameBlock.FACING, Direction.WEST);
 
-                            boolean filled = true;
-                            boolean[] frameHasEye = new boolean[12];
+                        boolean filled = true;
+                        boolean[] frameHasEye = new boolean[12];
 
-                            for(int l = 0; l < frameHasEye.length; ++l) {
-                                //FIX: This random needs to equal vanilla
-                                frameHasEye[l] = random.nextFloat() > 0.9F;
-                                filled &= frameHasEye[l];
-                            }
-                            
-                            setBlockInStructure(structurePiece, chunk, northFrame.with(EndPortalFrameBlock.EYE, frameHasEye[0]), 4, 3, 8);
-                            setBlockInStructure(structurePiece, chunk, northFrame.with(EndPortalFrameBlock.EYE, frameHasEye[1]), 5, 3, 8);
-                            setBlockInStructure(structurePiece, chunk, northFrame.with(EndPortalFrameBlock.EYE, frameHasEye[2]), 6, 3, 8);
-                            setBlockInStructure(structurePiece, chunk, southFrame.with(EndPortalFrameBlock.EYE, frameHasEye[3]), 4, 3, 12);
-                            setBlockInStructure(structurePiece, chunk, southFrame.with(EndPortalFrameBlock.EYE, frameHasEye[4]), 5, 3, 12);
-                            setBlockInStructure(structurePiece, chunk, southFrame.with(EndPortalFrameBlock.EYE, frameHasEye[5]), 6, 3, 12);
-                            setBlockInStructure(structurePiece, chunk, eastFrame.with(EndPortalFrameBlock.EYE, frameHasEye[6]), 3, 3, 9);
-                            setBlockInStructure(structurePiece, chunk, eastFrame.with(EndPortalFrameBlock.EYE, frameHasEye[7]), 3, 3, 10);
-                            setBlockInStructure(structurePiece, chunk, eastFrame.with(EndPortalFrameBlock.EYE, frameHasEye[8]), 3, 3, 11);
-                            setBlockInStructure(structurePiece, chunk, westFrame.with(EndPortalFrameBlock.EYE, frameHasEye[9]), 7, 3, 9);
-                            setBlockInStructure(structurePiece, chunk, westFrame.with(EndPortalFrameBlock.EYE, frameHasEye[10]), 7, 3, 10);
-                            setBlockInStructure(structurePiece, chunk, westFrame.with(EndPortalFrameBlock.EYE, frameHasEye[11]), 7, 3, 11);
-                            if (filled) {
-                                BlockState endPortal = Blocks.END_PORTAL.getDefaultState();
-                                setBlockInStructure(structurePiece, chunk, endPortal, 4, 3, 9);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 5, 3, 9);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 6, 3, 9);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 4, 3, 10);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 5, 3, 10);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 6, 3, 10);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 4, 3, 11);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 5, 3, 11);
-                                setBlockInStructure(structurePiece, chunk, endPortal, 6, 3, 11);
-                            }
-                            
-                        }
-                        return false;
-                    })
-            );
-            //Structure Move handlers
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("swamp_hut")),
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
-                        if(structurePiece instanceof ShiftableStructurePiece) {
-                            SwampHutGenerator This = ((SwampHutGenerator)(Object)structurePiece);
-                            ShiftableStructurePieceInvoker shiftableStructurePieceInvoker = ((ShiftableStructurePieceInvoker) This);
-                            shiftableStructurePieceInvoker.invokeAdjustToAverageHeight(worldAccess, chunkBox, 0);
-                        }
-                        return false;
-                    })
-            );
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("jungle_pyramid")),
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
-                        if(structurePiece instanceof ShiftableStructurePiece) {
-                            JungleTempleGenerator This = ((JungleTempleGenerator)(Object)structurePiece);
-                            ShiftableStructurePieceInvoker shiftableStructurePieceInvoker = ((ShiftableStructurePieceInvoker) This);
-                            shiftableStructurePieceInvoker.invokeAdjustToAverageHeight(worldAccess, chunkBox, 0);
-                        }
-                        return false;
-                    })
-            );
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("desert_pyramid")),
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
-                        if(structurePiece instanceof ShiftableStructurePiece) {
-                            DesertTempleGenerator This = ((DesertTempleGenerator)(Object)structurePiece);
-                            ShiftableStructurePieceInvoker shiftableStructurePieceInvoker = ((ShiftableStructurePieceInvoker) This);
-                            shiftableStructurePieceInvoker.invokeAdjustToMinHeight(worldAccess, -random.nextInt(3));
-                        }
-                        return false;
-                    })
-            );
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("igloo")),
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
-                        SimpleStructurePieceInvoker simplePieceInvoker = ((SimpleStructurePieceInvoker) structurePiece);
-                        IglooGeneratorPieceInvoker iglooGeneratorPieceInvoker = ((IglooGeneratorPieceInvoker) structurePiece);
-                        StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
-
-
-                        final Identifier TOP_TEMPLATE = new Identifier("igloo/top");
-                        final Identifier MIDDLE_TEMPLATE = new Identifier("igloo/middle");
-                        final Identifier BOTTOM_TEMPLATE = new Identifier("igloo/bottom");
-                        final Map<Identifier, BlockPos> OFFSETS_FROM_TOP = ImmutableMap.of(
-                                TOP_TEMPLATE, BlockPos.ORIGIN, MIDDLE_TEMPLATE, new BlockPos(2, -3, 4), BOTTOM_TEMPLATE, new BlockPos(0, -3, -2)
-                        );
-
-                        Identifier identifier = new Identifier(simplePieceInvoker.getTemplateIdString());
-                        StructurePlacementData structurePlacementData = iglooGeneratorPieceInvoker.invokeCreatePlacementData(simplePieceInvoker.getPlacementData().getRotation(), identifier);
-
-                        BlockPos blockPos = OFFSETS_FROM_TOP.get(identifier);
-                        BlockPos blockPos2 = simplePieceInvoker.getPos().add(StructureTemplate.transform(structurePlacementData, new BlockPos(3 - blockPos.getX(), 0, -blockPos.getZ())));
-
-                        int i = worldAccess.getTopY(Heightmap.Type.WORLD_SURFACE_WG, blockPos2.getX(), blockPos2.getZ());
-                        BlockPos posCache = simplePieceInvoker.getPos();
-
-                        simplePieceInvoker.setPos(simplePieceInvoker.getPos().add(0, i - 90 - 1, 0));
-
-                        simplePieceInvoker.getPlacementData().setBoundingBox(chunkBox);
-                        pieceInvoker.setBoundingBox(simplePieceInvoker.getTemplate().calculateBoundingBox(simplePieceInvoker.getPlacementData(), simplePieceInvoker.getPos()));
-
-                        if (identifier.equals(TOP_TEMPLATE)) {
-                            BlockPos blockPos4 = simplePieceInvoker.getPos().add(StructureTemplate.transform(structurePlacementData, new BlockPos(3, 0, 5)));
-                        }
-
-                        simplePieceInvoker.setPos(posCache);
-
-                        //return true;
-                        return false;
-                    })
-            );
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("shipwreck")),
-                    //This is looks different than the original, but all that happened to it is it was restructured and named.
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
-                        SimpleStructurePieceInvoker simplePieceInvoker = ((SimpleStructurePieceInvoker) structurePiece);
-                        ShipwreckGeneratorPieceInvoker shipwreckGeneratorPieceInvoker  = ((ShipwreckGeneratorPieceInvoker) structurePiece);
-                        StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
-
-                        Heightmap.Type heightmap = shipwreckGeneratorPieceInvoker.getGrounded() ? Heightmap.Type.WORLD_SURFACE_WG : Heightmap.Type.OCEAN_FLOOR_WG;
-
-                        Vec3i size = simplePieceInvoker.getTemplate().getSize();
-                        int area2D = size.getX() * size.getZ();
-                        int YtoMoveTo = 0;
-
-                        //Beached Shipwrecks
-                        if(shipwreckGeneratorPieceInvoker.getGrounded()) {
-                            //This moves it down to the minimum height of the world heightmap.
-                            int minimumHeight = worldAccess.getTopY();
-                            //Run through the 2D locations of the structure and get the average of their heightmaps
-                            BlockPos otherBottomCorner = simplePieceInvoker.getPos().add(size.getX() - 1, 0, size.getZ() - 1);
-                            //Run through the 2D locations of the structure and get the average of their heightmaps
-                            for (BlockPos bottomLayerBlock : BlockPos.iterate(simplePieceInvoker.getPos(), otherBottomCorner)) {
-                                minimumHeight = Math.min(minimumHeight, worldAccess.getTopY(heightmap, bottomLayerBlock.getX(), bottomLayerBlock.getZ()));
-                            }
+                        for(int l = 0; l < frameHasEye.length; ++l) {
                             //FIX: This random needs to equal vanilla
-                            YtoMoveTo = minimumHeight - size.getY() / 2 - random.nextInt(3);
+                            frameHasEye[l] = random.nextFloat() > 0.9F;
+                            filled &= frameHasEye[l];
+                        }
+
+                        setBlockInStructure(structurePiece, chunk, northFrame.with(EndPortalFrameBlock.EYE, frameHasEye[0]), 4, 3, 8);
+                        setBlockInStructure(structurePiece, chunk, northFrame.with(EndPortalFrameBlock.EYE, frameHasEye[1]), 5, 3, 8);
+                        setBlockInStructure(structurePiece, chunk, northFrame.with(EndPortalFrameBlock.EYE, frameHasEye[2]), 6, 3, 8);
+                        setBlockInStructure(structurePiece, chunk, southFrame.with(EndPortalFrameBlock.EYE, frameHasEye[3]), 4, 3, 12);
+                        setBlockInStructure(structurePiece, chunk, southFrame.with(EndPortalFrameBlock.EYE, frameHasEye[4]), 5, 3, 12);
+                        setBlockInStructure(structurePiece, chunk, southFrame.with(EndPortalFrameBlock.EYE, frameHasEye[5]), 6, 3, 12);
+                        setBlockInStructure(structurePiece, chunk, eastFrame.with(EndPortalFrameBlock.EYE, frameHasEye[6]), 3, 3, 9);
+                        setBlockInStructure(structurePiece, chunk, eastFrame.with(EndPortalFrameBlock.EYE, frameHasEye[7]), 3, 3, 10);
+                        setBlockInStructure(structurePiece, chunk, eastFrame.with(EndPortalFrameBlock.EYE, frameHasEye[8]), 3, 3, 11);
+                        setBlockInStructure(structurePiece, chunk, westFrame.with(EndPortalFrameBlock.EYE, frameHasEye[9]), 7, 3, 9);
+                        setBlockInStructure(structurePiece, chunk, westFrame.with(EndPortalFrameBlock.EYE, frameHasEye[10]), 7, 3, 10);
+                        setBlockInStructure(structurePiece, chunk, westFrame.with(EndPortalFrameBlock.EYE, frameHasEye[11]), 7, 3, 11);
+                        if (filled) {
+                            BlockState endPortal = Blocks.END_PORTAL.getDefaultState();
+                            setBlockInStructure(structurePiece, chunk, endPortal, 4, 3, 9);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 5, 3, 9);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 6, 3, 9);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 4, 3, 10);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 5, 3, 10);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 6, 3, 10);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 4, 3, 11);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 5, 3, 11);
+                            setBlockInStructure(structurePiece, chunk, endPortal, 6, 3, 11);
+                        }
+
+                    }
+                    return false;
+                })
+        );
+        //Structure Move handlers
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("swamp_hut")),
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
+                    if(structurePiece instanceof ShiftableStructurePiece) {
+                        SwampHutGenerator This = ((SwampHutGenerator)(Object)structurePiece);
+                        ShiftableStructurePieceInvoker shiftableStructurePieceInvoker = ((ShiftableStructurePieceInvoker) This);
+                        shiftableStructurePieceInvoker.invokeAdjustToAverageHeight(worldAccess, chunkBox, 0);
+                    }
+                    return false;
+                })
+        );
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("jungle_pyramid")),
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
+                    if(structurePiece instanceof ShiftableStructurePiece) {
+                        JungleTempleGenerator This = ((JungleTempleGenerator)(Object)structurePiece);
+                        ShiftableStructurePieceInvoker shiftableStructurePieceInvoker = ((ShiftableStructurePieceInvoker) This);
+                        shiftableStructurePieceInvoker.invokeAdjustToAverageHeight(worldAccess, chunkBox, 0);
+                    }
+                    return false;
+                })
+        );
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("desert_pyramid")),
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
+                    if(structurePiece instanceof ShiftableStructurePiece) {
+                        DesertTempleGenerator This = ((DesertTempleGenerator)(Object)structurePiece);
+                        ShiftableStructurePieceInvoker shiftableStructurePieceInvoker = ((ShiftableStructurePieceInvoker) This);
+                        shiftableStructurePieceInvoker.invokeAdjustToMinHeight(worldAccess, -random.nextInt(3));
+                    }
+                    return false;
+                })
+        );
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("igloo")),
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
+                    SimpleStructurePieceInvoker simplePieceInvoker = ((SimpleStructurePieceInvoker) structurePiece);
+                    IglooGeneratorPieceInvoker iglooGeneratorPieceInvoker = ((IglooGeneratorPieceInvoker) structurePiece);
+                    StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
+
+
+                    final Identifier TOP_TEMPLATE = new Identifier("igloo/top");
+                    final Identifier MIDDLE_TEMPLATE = new Identifier("igloo/middle");
+                    final Identifier BOTTOM_TEMPLATE = new Identifier("igloo/bottom");
+                    final Map<Identifier, BlockPos> OFFSETS_FROM_TOP = ImmutableMap.of(
+                            TOP_TEMPLATE, BlockPos.ORIGIN, MIDDLE_TEMPLATE, new BlockPos(2, -3, 4), BOTTOM_TEMPLATE, new BlockPos(0, -3, -2)
+                    );
+
+                    Identifier identifier = new Identifier(simplePieceInvoker.getTemplateIdString());
+                    StructurePlacementData structurePlacementData = iglooGeneratorPieceInvoker.invokeCreatePlacementData(simplePieceInvoker.getPlacementData().getRotation(), identifier);
+
+                    BlockPos blockPos = OFFSETS_FROM_TOP.get(identifier);
+                    BlockPos blockPos2 = simplePieceInvoker.getPos().add(StructureTemplate.transform(structurePlacementData, new BlockPos(3 - blockPos.getX(), 0, -blockPos.getZ())));
+
+                    int i = worldAccess.getTopY(Heightmap.Type.WORLD_SURFACE_WG, blockPos2.getX(), blockPos2.getZ());
+                    BlockPos posCache = simplePieceInvoker.getPos();
+
+                    simplePieceInvoker.setPos(simplePieceInvoker.getPos().add(0, i - 90 - 1, 0));
+
+                    simplePieceInvoker.getPlacementData().setBoundingBox(chunkBox);
+                    pieceInvoker.setBoundingBox(simplePieceInvoker.getTemplate().calculateBoundingBox(simplePieceInvoker.getPlacementData(), simplePieceInvoker.getPos()));
+
+                    if (identifier.equals(TOP_TEMPLATE)) {
+                        BlockPos blockPos4 = simplePieceInvoker.getPos().add(StructureTemplate.transform(structurePlacementData, new BlockPos(3, 0, 5)));
+                    }
+
+                    simplePieceInvoker.setPos(posCache);
+
+                    //return true;
+                    return false;
+                })
+        );
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("shipwreck")),
+                //This is looks different than the original, but all that happened to it is it was restructured and named.
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
+                    SimpleStructurePieceInvoker simplePieceInvoker = ((SimpleStructurePieceInvoker) structurePiece);
+                    ShipwreckGeneratorPieceInvoker shipwreckGeneratorPieceInvoker  = ((ShipwreckGeneratorPieceInvoker) structurePiece);
+                    StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
+
+                    Heightmap.Type heightmap = shipwreckGeneratorPieceInvoker.getGrounded() ? Heightmap.Type.WORLD_SURFACE_WG : Heightmap.Type.OCEAN_FLOOR_WG;
+
+                    Vec3i size = simplePieceInvoker.getTemplate().getSize();
+                    int area2D = size.getX() * size.getZ();
+                    int YtoMoveTo = 0;
+
+                    //Beached Shipwrecks
+                    if(shipwreckGeneratorPieceInvoker.getGrounded()) {
+                        //This moves it down to the minimum height of the world heightmap.
+                        int minimumHeight = worldAccess.getTopY();
+                        //Run through the 2D locations of the structure and get the average of their heightmaps
+                        BlockPos otherBottomCorner = simplePieceInvoker.getPos().add(size.getX() - 1, 0, size.getZ() - 1);
+                        //Run through the 2D locations of the structure and get the average of their heightmaps
+                        for (BlockPos bottomLayerBlock : BlockPos.iterate(simplePieceInvoker.getPos(), otherBottomCorner)) {
+                            minimumHeight = Math.min(minimumHeight, worldAccess.getTopY(heightmap, bottomLayerBlock.getX(), bottomLayerBlock.getZ()));
+                        }
+                        //FIX: This random needs to equal vanilla
+                        YtoMoveTo = minimumHeight - size.getY() / 2 - random.nextInt(3);
 
                         //Normal shipwrecks
-                        } else {
-                            //Basically this just averages all the heights of ocean floor heightmap and puts it there.
-                            int accumulatedHeight = 0;
-                            //Run through the 2D locations of the structure and get the average of their heightmaps
-                            BlockPos otherBottomCorner = simplePieceInvoker.getPos().add(size.getX() - 1, 0, size.getZ() - 1);
-                            //Run through the 2D locations of the structure and get the average of their heightmaps
-                            for (BlockPos bottomLayerBlock : BlockPos.iterate(simplePieceInvoker.getPos(), otherBottomCorner)) {
-                                accumulatedHeight += worldAccess.getTopY(heightmap, bottomLayerBlock.getX(), bottomLayerBlock.getZ());
-                            }
-                            YtoMoveTo = accumulatedHeight / area2D;
+                    } else {
+                        //Basically this just averages all the heights of ocean floor heightmap and puts it there.
+                        int accumulatedHeight = 0;
+                        //Run through the 2D locations of the structure and get the average of their heightmaps
+                        BlockPos otherBottomCorner = simplePieceInvoker.getPos().add(size.getX() - 1, 0, size.getZ() - 1);
+                        //Run through the 2D locations of the structure and get the average of their heightmaps
+                        for (BlockPos bottomLayerBlock : BlockPos.iterate(simplePieceInvoker.getPos(), otherBottomCorner)) {
+                            accumulatedHeight += worldAccess.getTopY(heightmap, bottomLayerBlock.getX(), bottomLayerBlock.getZ());
+                        }
+                        YtoMoveTo = accumulatedHeight / area2D;
+                    }
+
+                    simplePieceInvoker.setPos(new BlockPos(simplePieceInvoker.getPos().getX(), YtoMoveTo, simplePieceInvoker.getPos().getZ()));
+                    //super.generate(world, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot);
+                    simplePieceInvoker.getPlacementData().setBoundingBox(chunkBox);
+                    pieceInvoker.setBoundingBox(simplePieceInvoker.getTemplate().calculateBoundingBox(simplePieceInvoker.getPlacementData(), simplePieceInvoker.getPos()));
+
+                    return false;
+                })
+        );
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("shipwreck_beached")),
+                structuresAfterDelete.get(structuresAfterDelete.size() - 1).getRight())
+        );
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("ocean_ruin_cold")),
+                //This is looks different than the original, but all that happened to it is it was restructured and named.
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
+                    SimpleStructurePieceInvoker simplePieceInvoker = ((SimpleStructurePieceInvoker) structurePiece);
+                    OceanRuinGeneratorPieceInvoker oceanRuinGeneratorPieceInvoker = ((OceanRuinGeneratorPieceInvoker) structurePiece);
+                    StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
+
+                    simplePieceInvoker.getPlacementData()
+                            .clearProcessors()
+                            .addProcessor(new BlockRotStructureProcessor(oceanRuinGeneratorPieceInvoker.getIntegrity()))
+                            .addProcessor(BlockIgnoreStructureProcessor.IGNORE_AIR_AND_STRUCTURE_BLOCKS);
+
+                    int i = worldAccess.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, simplePieceInvoker.getPos().getX(), simplePieceInvoker.getPos().getZ());
+                    simplePieceInvoker.setPos(new BlockPos(simplePieceInvoker.getPos().getX(), i, simplePieceInvoker.getPos().getZ()));
+
+                    BlockPos otherCorner = StructureTemplate.transformAround(
+                            new BlockPos(simplePieceInvoker.getTemplate().getSize().getX() - 1, 0, simplePieceInvoker.getTemplate().getSize().getZ() - 1),
+                            BlockMirror.NONE,
+                            simplePieceInvoker.getPlacementData().getRotation(),
+                            BlockPos.ORIGIN
+                    ).add(simplePieceInvoker.getPos());
+
+                    BlockPos structurePos = simplePieceInvoker.getPos();
+
+                    //This is method_14829 inlined, but it has been changed to use the heightmap instead of using the physical blocks that get deleted.
+                    int yToMoveTo = structurePos.getY();
+                    int initialY = structurePos.getY() - 1;
+
+                    int lowestSpot = 512;
+                    int bottomOfWorld = 0;
+
+                    for(BlockPos blockPos : BlockPos.iterate(structurePos, otherCorner)) {
+                        int y = worldAccess.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, blockPos.getX(), blockPos.getZ());
+                        lowestSpot = Math.min(lowestSpot, y);
+
+                        if (y < initialY - 2) {
+                            bottomOfWorld++;
+                        }
+                    }
+
+                    int p = Math.abs(structurePos.getX() - otherCorner.getX());
+                    if (initialY - lowestSpot > 2 && bottomOfWorld > p - 2) {
+                        yToMoveTo = lowestSpot + 1;
+                    }
+
+                    //int yToMoveTo = oceanRuinYCalculator(simplePieceInvoker.getPos(), worldAccess, otherCorner);
+
+                    simplePieceInvoker.setPos(new BlockPos(simplePieceInvoker.getPos().getX(), yToMoveTo, simplePieceInvoker.getPos().getZ()));
+                    simplePieceInvoker.getPlacementData().setBoundingBox(chunkBox);
+                    pieceInvoker.setBoundingBox(simplePieceInvoker.getTemplate().calculateBoundingBox(simplePieceInvoker.getPlacementData(), simplePieceInvoker.getPos()));
+                    return false;
+                })
+        );
+        structuresAfterDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("ocean_ruin_warm")),
+                structuresAfterDelete.get(structuresAfterDelete.size() - 1).getRight())
+        );
+
+    }
+    private static void registerStructuresBeforeDelete(WorldAccess world) {
+        Registry<Structure> structureRegistry = world.getRegistryManager().get(RegistryKeys.STRUCTURE);
+        //These are ran before all the blocks are deleted for the structures that need that.
+        structuresBeforeDelete.clear();
+        structuresBeforeDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("buried_treasure")),
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
+                    StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
+
+                    LOGGER.info("Ran buried treasure");
+
+                    int i = worldAccess.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, pieceInvoker.getBoundingBox().getMinX(), pieceInvoker.getBoundingBox().getMinZ());
+                    BlockPos.Mutable mutable = new BlockPos.Mutable(pieceInvoker.getBoundingBox().getMinX(), i, pieceInvoker.getBoundingBox().getMinZ());
+
+                    while(mutable.getY() > worldAccess.getBottomY()) {
+                        BlockState blockState2 = worldAccess.getBlockState(mutable.down());
+                        if (blockState2 == Blocks.SANDSTONE.getDefaultState()
+                                || blockState2 == Blocks.STONE.getDefaultState()
+                                || blockState2 == Blocks.ANDESITE.getDefaultState()
+                                || blockState2 == Blocks.GRANITE.getDefaultState()
+                                || blockState2 == Blocks.DIORITE.getDefaultState()) {
+                            break;
                         }
 
-                        simplePieceInvoker.setPos(new BlockPos(simplePieceInvoker.getPos().getX(), YtoMoveTo, simplePieceInvoker.getPos().getZ()));
-                        //super.generate(world, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot);
-                        simplePieceInvoker.getPlacementData().setBoundingBox(chunkBox);
-                        pieceInvoker.setBoundingBox(simplePieceInvoker.getTemplate().calculateBoundingBox(simplePieceInvoker.getPlacementData(), simplePieceInvoker.getPos()));
+                        mutable.move(0, -1, 0);
+                    }
+                    pieceInvoker.setBoundingBox(new BlockBox(mutable));
+                    return false;
+                })
+        );
+        structuresBeforeDelete.add(new MutablePair<>(
+                structureRegistry.get(Identifier.tryParse("end_city")),
+                (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
+                    LOGGER.info("Ran end city");
+                    return true;
+                })
+        );
 
-                        return false;
-                    })
-            );
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("shipwreck_beached")),
-                    structures.get(structures.size() - 1).getRight())
-            );
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("ocean_ruin_cold")),
-                    //This is looks different than the original, but all that happened to it is it was restructured and named.
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
-                        SimpleStructurePieceInvoker simplePieceInvoker = ((SimpleStructurePieceInvoker) structurePiece);
-                        OceanRuinGeneratorPieceInvoker oceanRuinGeneratorPieceInvoker = ((OceanRuinGeneratorPieceInvoker) structurePiece);
-                        StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
+    }
+    private static void registerFeaturesAfterDelete(WorldAccess world) {
+        Registry<PlacedFeature> featuresRegistry = world.getRegistryManager().get(RegistryKeys.PLACED_FEATURE);
+        //These are ran after all the blocks are deleted for the features that need that.
 
-                        simplePieceInvoker.getPlacementData()
-                                .clearProcessors()
-                                .addProcessor(new BlockRotStructureProcessor(oceanRuinGeneratorPieceInvoker.getIntegrity()))
-                                .addProcessor(BlockIgnoreStructureProcessor.IGNORE_AIR_AND_STRUCTURE_BLOCKS);
+        featuresAfterDelete.clear();
+        featuresAfterDelete.add(new MutablePair<>(
+                Identifier.tryParse("minecraft:amethyst_geode"),
+                (worldAccess, generator, random, pos, chunk, feature) -> {
+                    LOGGER.info("geode");
 
-                        int i = worldAccess.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, simplePieceInvoker.getPos().getX(), simplePieceInvoker.getPos().getZ());
-                        simplePieceInvoker.setPos(new BlockPos(simplePieceInvoker.getPos().getX(), i, simplePieceInvoker.getPos().getZ()));
+                    return true;
+                })
+        );
+    }
+    //This gets called by an entrypoint to refresh all the handlers as the registry key changes every time you open and close the world
+    private static synchronized void fixRaceCondition(WorldAccess world) {
+        if (!ran) {
+            registerStructuresBeforeDelete(world);
+            registerStructuresAfterDelete(world);
 
-                        BlockPos otherCorner = StructureTemplate.transformAround(
-                                        new BlockPos(simplePieceInvoker.getTemplate().getSize().getX() - 1, 0, simplePieceInvoker.getTemplate().getSize().getZ() - 1),
-                                        BlockMirror.NONE,
-                                        simplePieceInvoker.getPlacementData().getRotation(),
-                                        BlockPos.ORIGIN
-                        ).add(simplePieceInvoker.getPos());
-
-                        BlockPos structurePos = simplePieceInvoker.getPos();
-
-                        //This is method_14829 inlined, but it has been changed to use the heightmap instead of using the physical blocks that get deleted.
-                        int yToMoveTo = structurePos.getY();
-                        int initialY = structurePos.getY() - 1;
-
-                        int lowestSpot = 512;
-                        int bottomOfWorld = 0;
-
-                        for(BlockPos blockPos : BlockPos.iterate(structurePos, otherCorner)) {
-                            int y = worldAccess.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, blockPos.getX(), blockPos.getZ());
-                            lowestSpot = Math.min(lowestSpot, y);
-
-                            if (y < initialY - 2) {
-                                bottomOfWorld++;
-                            }
-                        }
-
-                        int p = Math.abs(structurePos.getX() - otherCorner.getX());
-                        if (initialY - lowestSpot > 2 && bottomOfWorld > p - 2) {
-                            yToMoveTo = lowestSpot + 1;
-                        }
-
-                        //int yToMoveTo = oceanRuinYCalculator(simplePieceInvoker.getPos(), worldAccess, otherCorner);
-
-                        simplePieceInvoker.setPos(new BlockPos(simplePieceInvoker.getPos().getX(), yToMoveTo, simplePieceInvoker.getPos().getZ()));
-                        simplePieceInvoker.getPlacementData().setBoundingBox(chunkBox);
-                        pieceInvoker.setBoundingBox(simplePieceInvoker.getTemplate().calculateBoundingBox(simplePieceInvoker.getPlacementData(), simplePieceInvoker.getPos()));
-                        return false;
-                    })
-            );
-            structures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("ocean_ruin_warm")),
-                    structures.get(structures.size() - 1).getRight())
-            );
-
-            //These are ran before all the blocks are deleted for the structures that need that.
-            beforeDeleteStructures.clear();
-            beforeDeleteStructures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("buried_treasure")),
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
-                        StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
-
-                        LOGGER.info("Ran buried treasure");
-
-                        int i = worldAccess.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, pieceInvoker.getBoundingBox().getMinX(), pieceInvoker.getBoundingBox().getMinZ());
-                        BlockPos.Mutable mutable = new BlockPos.Mutable(pieceInvoker.getBoundingBox().getMinX(), i, pieceInvoker.getBoundingBox().getMinZ());
-
-                        while(mutable.getY() > worldAccess.getBottomY()) {
-                            BlockState blockState2 = worldAccess.getBlockState(mutable.down());
-                            if (blockState2 == Blocks.SANDSTONE.getDefaultState()
-                                    || blockState2 == Blocks.STONE.getDefaultState()
-                                    || blockState2 == Blocks.ANDESITE.getDefaultState()
-                                    || blockState2 == Blocks.GRANITE.getDefaultState()
-                                    || blockState2 == Blocks.DIORITE.getDefaultState()) {
-                                break;
-                            }
-
-                            mutable.move(0, -1, 0);
-                        }
-                        pieceInvoker.setBoundingBox(new BlockBox(mutable));
-                        return false;
-                    })
-            );
-            beforeDeleteStructures.add(new MutablePair<>(
-                    structureRegistry.get(Identifier.tryParse("end_city")),
-                    (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, blockPos2, chunk) -> {
-                        LOGGER.info("Ran end city");
-                        return true;
-                    })
-            );
-            
+            registerFeaturesAfterDelete(world);
             ran = true;
         }
     }
@@ -370,7 +411,7 @@ public class StructureHelper {
     //This function takes a structure start (those basically say put a structure, and if it has parts its parts, here) and a handler
     // and loops through all the pieces in the structure start running the provided handler on each one.
     private static void handleStructureStart(StructureStart structureStart, StructureWorldAccess world, StructureAccessor structureAccessor, ChunkGenerator chunkGenerator, Random random, BlockBox chunkBox, ChunkPos chunkPos,
-                                             ManyArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk> handler, Chunk chunk) {
+                                             NineArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk> handler, Chunk chunk) {
         List<StructurePiece> structurePieces = structureStart.getChildren();
         if (!structurePieces.isEmpty()) {
             BlockBox firstPieceBoundBox = structurePieces.get(0).getBoundingBox();
@@ -440,11 +481,25 @@ public class StructureHelper {
         }
     }
 
+    private static void handleFeature(StructureWorldAccess world, ChunkGenerator generator, Random random, BlockPos pos, Chunk chunk, PlacedFeature feature, FeaturesHandlerType handler) {
+        PlacedFeatureAccessor featureAccessor = (PlacedFeatureAccessor)(Object) feature;
+        FeaturePlacementContext context = new FeaturePlacementContext(world, generator, Optional.of(feature));
+        Stream<BlockPos> stream = Stream.of(pos);
+
+        for(PlacementModifier placementModifier : featureAccessor.getPlacementModifiers()) {
+            stream = stream.flatMap(posx -> placementModifier.getPositions(context, random, posx));
+        }
+
+        ConfiguredFeature<?, ?> configuredFeature = featureAccessor.getFeature().value();
+        stream.forEach(placedPos -> {
+            configuredFeature.generate(context.getWorld(), context.getChunkGenerator(), random, placedPos);
+        });
+    }
+
     //This function loops through all structureStarts in a chunk, and runs handleStructureStart() on them. Normally in
     // Minecraft instead of running handleStructureStart() on the StructureStart it would generate the StructureStart.
     // The function this is based off is called ChunkGenerator.generateFeatures(). It would also generate features (trees,
     // water pools, things aren't the base terrain, but don't have bounding boxes).
-
     public static void handleStructures(StructureWorldAccess world, Chunk chunk, StructureAccessor structureAccessor, ChunkGenerator generator, boolean beforeDelete) {
         ChunkPos chunkPos = chunk.getPos();
         //Check if we should generate features
@@ -458,7 +513,7 @@ public class StructureHelper {
 
             //Get the structure registry
             Registry<Structure> registry = world.getRegistryManager().get(RegistryKeys.STRUCTURE);
-            Map<Integer, List<Structure>> map = registry.stream()
+            Map<Integer, List<Structure>> stageToStructureMap = registry.stream()
                     .collect(Collectors.groupingBy(structureType -> structureType.getFeatureGenerationStep().ordinal()));
 
             //Get the structure to place
@@ -483,6 +538,8 @@ public class StructureHelper {
             });
             set.retainAll(This.getBiomeSource().getBiomes());
 
+            Registry<PlacedFeature> featuresRegistry = world.getRegistryManager().get(RegistryKeys.PLACED_FEATURE);
+
             if(!ran) {
                 fixRaceCondition(world);
             }
@@ -493,7 +550,7 @@ public class StructureHelper {
                 for(int k = 0; k < j; ++k) {
                     int m = 0;
                     if (structureAccessor.shouldGenerateStructures()) {
-                        for(Structure structure : map.getOrDefault(k, Collections.emptyList())) {
+                        for(Structure structure : stageToStructureMap.getOrDefault(k, Collections.emptyList())) {
                             //The chunkrandom is correct to here
                             chunkRandom.setDecoratorSeed(l, m, k);
                             Supplier<String> structureIDSupplier = () -> (String)registry.getKey(structure).map(Object::toString).orElseGet(structure::toString);
@@ -504,14 +561,14 @@ public class StructureHelper {
                                         //Wrong here
                                         .forEach(start -> {
                                             if(beforeDelete) {
-                                                for(Pair<Structure, ManyArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>> structureFunctionPair : beforeDeleteStructures) {
+                                                for(Pair<Structure, NineArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>> structureFunctionPair : structuresBeforeDelete) {
                                                     if (structure == structureFunctionPair.getLeft()) {
                                                         handleStructureStart(start, world, structureAccessor, generator, chunkRandom, This.getBlockBoxForChunkInvoker(chunk), chunkPos, structureFunctionPair.getRight(), chunk);
                                                         break;
                                                     }
                                                 }
                                             } else {
-                                                for(Pair<Structure, ManyArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>> structureFunctionPair : structures) {
+                                                for(Pair<Structure, NineArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>> structureFunctionPair : structuresAfterDelete) {
                                                     if (structure == structureFunctionPair.getLeft()) {
                                                         handleStructureStart(start, world, structureAccessor, generator, chunkRandom, This.getBlockBoxForChunkInvoker(chunk), chunkPos, structureFunctionPair.getRight(), chunk);
                                                         break;
@@ -531,7 +588,6 @@ public class StructureHelper {
                     }
 
                     //This part is for generating features that aren't needed. I keep it here for reference.
-                    /*
                     if (k < i) {
                         IntSet intSet = new IntArraySet();
 
@@ -555,11 +611,19 @@ public class StructureHelper {
                         for(int o = 0; o < n; ++o) {
                             int p = is[o];
                             PlacedFeature placedFeature = indexedFeatures2.features().get(p);
-                            Supplier<String> supplier2 = () -> (String)registry2.getKey(placedFeature).map(Object::toString).orElseGet(placedFeature::toString);
+                            Supplier<String> supplier2 = () -> (String)featuresRegistry.getKey(placedFeature).map(Object::toString).orElseGet(placedFeature::toString);
                             chunkRandom.setDecoratorSeed(l, p, k);
 
                             try {
                                 world.setCurrentlyGeneratingStructureName(supplier2);
+
+                                /*for(Pair<Identifier, FeaturesHandlerType> featureFunctionPair : featuresAfterDelete) {
+                                    if(!beforeDelete && placedFeature.feature().matchesId(featureFunctionPair.getLeft())) {
+                                        //handleFeature(world, generator, chunkRandom, minChunkPos, chunk, placedFeature, featureFunctionPair.getRight());
+                                        placedFeature.generate(world, generator, chunkRandom, minChunkPos);
+                                        break;
+                                    }
+                                }*/
                                 placedFeature.generate(world, generator, chunkRandom, minChunkPos);
                             } catch (Exception var30) {
                                 CrashReport crashReport2 = CrashReport.create(var30, "Feature placement");
@@ -567,7 +631,7 @@ public class StructureHelper {
                                 throw new CrashException(crashReport2);
                             }
                         }
-                    }//*/
+                    }
                 }
 
                 world.setCurrentlyGeneratingStructureName(null);

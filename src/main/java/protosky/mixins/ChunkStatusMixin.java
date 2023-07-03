@@ -1,27 +1,21 @@
 package protosky.mixins;
 
 import com.mojang.datafixers.util.Either;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
+import net.minecraft.server.world.ChunkHolder;
 import net.minecraft.server.world.ServerLightingProvider;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.structure.StructureStart;
 import net.minecraft.structure.StructureTemplateManager;
-import net.minecraft.util.Identifier;
 import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkStatus;
-import net.minecraft.world.chunk.ProtoChunk;
-import net.minecraft.world.gen.chunk.Blender;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
-import net.minecraft.world.gen.structure.Structure;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import protosky.WorldGenUtils;
 import protosky.stuctures.PillarHelper;
@@ -29,21 +23,20 @@ import protosky.stuctures.StructureHelper;
 
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
+import static net.minecraft.world.chunk.ChunkStatus.POST_CARVER_HEIGHTMAPS;
 import static protosky.ProtoSkySettings.LOGGER;
 
 @Mixin(ChunkStatus.class)
 public abstract class ChunkStatusMixin {
-    @Inject(method = "method_51375", at = @At("HEAD"), cancellable = true)
+    //@Inject(method = "method_51375", at = @At("HEAD"), cancellable = true)
     //This is under ChunkStatus FEATURES. To find the inject method you need to read the bytecode. In Idea click View -> Show Bytecode
     // In there search for "features" (you need the quotes).
     //This is where blocks structures should get placed, now it's where the structures ProtoSky needs get placed.
-    private static void FEATURES(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List<Chunk> chunks, Chunk chunk, CallbackInfo ci) {
+    private static void FEATURES(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List<Chunk> chunks, Chunk chunk/*, CallbackInfo ci*/) {
         Heightmap.populateHeightmaps(chunk, EnumSet.of(Heightmap.Type.MOTION_BLOCKING, Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, Heightmap.Type.OCEAN_FLOOR, Heightmap.Type.WORLD_SURFACE));
         ChunkRegion chunkRegion = new ChunkRegion(world, chunks, targetStatus, 1);
         //This would normally generate structures, the blocks, not the bounding boxes.
@@ -51,7 +44,7 @@ public abstract class ChunkStatusMixin {
         //StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, false);
         //Blender.tickLeavesAndFluids(chunkRegion, chunk);
 
-        //Generate do the structures then delete blocks while in the end to remove the end cities
+        //I couldn't figure out how to generate the shulkers and elytras without also generating the blocks, so we generate the whole end city and delete the blocks
         if (world.getRegistryKey() == World.END) {
             //This generates all the structures
             StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, true);
@@ -69,9 +62,105 @@ public abstract class ChunkStatusMixin {
             //This generates all the structures
             StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, false);
         }
-        ci.cancel();
+        //ci.cancel();
     }
-    @Inject(method = "method_20614", at = @At("HEAD"), cancellable = false)
+    private static void afterFeaturesFunction(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List<Chunk> chunks, Chunk chunk) {
+        LOGGER.info("After features");
+    }
+    private static ChunkStatus AFTER_FEATURES;
+    @Inject(method = "register(Ljava/lang/String;Lnet/minecraft/world/chunk/ChunkStatus;IZLjava/util/EnumSet;Lnet/minecraft/world/chunk/ChunkStatus$ChunkType;Lnet/minecraft/world/chunk/ChunkStatus$GenerationTask;Lnet/minecraft/world/chunk/ChunkStatus$LoadTask;)Lnet/minecraft/world/chunk/ChunkStatus;",
+            at = @At("HEAD"), cancellable = true)
+    private static void register(String id,
+                                 ChunkStatus previous,
+                                 int taskMargin,
+                                 boolean shouldAlwaysUpgrade,
+                                 EnumSet<Heightmap.Type> heightMapTypes,
+                                 ChunkStatus.ChunkType chunkType,
+                                 ChunkStatus.GenerationTask generationTask,
+                                 ChunkStatus.LoadTask loadTask,
+                                 CallbackInfoReturnable<ChunkStatus> cir
+    ) {
+       if(id.equals("initialize_light")) {
+            AFTER_FEATURES = ChunkStatusInvoker.invokeRegister("after_features", ChunkStatus.FEATURES, 8, POST_CARVER_HEIGHTMAPS, ChunkStatus.ChunkType.PROTOCHUNK, ChunkStatusMixin::afterFeaturesFunction);
+            cir.setReturnValue(Registry.register(
+                    Registries.CHUNK_STATUS,
+                    id,
+                    new ChunkStatus(
+                            AFTER_FEATURES,
+                            taskMargin,
+                            shouldAlwaysUpgrade,
+                            heightMapTypes,
+                            chunkType,
+                            (
+                                    ChunkStatus targetStatus,
+                                    Executor executor,
+                                    ServerWorld world,
+                                    ChunkGenerator generator,
+                                    StructureTemplateManager structureTemplateManager,
+                                    ServerLightingProvider lightingProvider,
+                                    Function<Chunk, CompletableFuture<Either<Chunk, ChunkHolder.Unloaded >>> fullChunkConverter,
+                                    List<Chunk> chunks,
+                                    Chunk chunk
+                            ) -> {
+                                WorldGenUtils.genHeightMaps(chunk);
+                                return generationTask.doWork(targetStatus, executor, world, generator, structureTemplateManager, lightingProvider, fullChunkConverter, chunks, chunk);
+                            },
+                            loadTask)
+            ));
+
+       } else if (id.equals("features")) {
+           cir.setReturnValue(Registry.register(
+                   Registries.CHUNK_STATUS,
+                   id,
+                   new ChunkStatus(
+                           previous,
+                           taskMargin,
+                           shouldAlwaysUpgrade,
+                           heightMapTypes,
+                           chunkType,
+                           (ChunkStatus.SimpleGenerationTask)ChunkStatusMixin::FEATURES,
+                           loadTask
+                   )
+           ));
+
+       } else if (id.equals("spawn")) {
+           cir.setReturnValue(Registry.register(
+                   Registries.CHUNK_STATUS,
+                   id,
+                   new ChunkStatus(
+                           previous,
+                           taskMargin,
+                           shouldAlwaysUpgrade,
+                           heightMapTypes,
+                           chunkType,
+                           (ChunkStatus.SimpleGenerationTask) (
+                                    ChunkStatus targetStatus,
+                                    ServerWorld world,
+                                    ChunkGenerator generator,
+                                    List<Chunk> chunks,
+                                    Chunk chunk
+                           ) -> {},
+                           loadTask
+                   )
+           ));
+       } else {
+           cir.setReturnValue(Registry.register(
+                   Registries.CHUNK_STATUS,
+                   id,
+                   new ChunkStatus(
+                           previous,
+                           taskMargin,
+                           shouldAlwaysUpgrade,
+                           heightMapTypes,
+                           chunkType,
+                           generationTask,
+                           loadTask
+                   )
+           ));
+       }
+    }
+
+/*    @Inject(method = "method_20614", at = @At("HEAD"), cancellable = false)
     //This is under ChunkStatus INITIALIZE_LIGHT. To find the inject method you need to read the bytecode. In Idea click View -> Show Bytecode
     // In there search for "initialize_light" (you need the quotes).
     //We need to move the heightmaps down to y = 0 after structures have been generated because some rely on the heightmap to move.
@@ -86,9 +175,9 @@ public abstract class ChunkStatusMixin {
 
         //Don't cancel because we want the lighting to work.
         //ci.cancel();
-    }
+    }*/
 
-    @Inject(method = "method_17033", at = @At("HEAD"), cancellable = true)
+/*    @Inject(method = "method_17033", at = @At("HEAD"), cancellable = true)
     //This is under ChunkStatus SPAWN. To find the inject method you need to read the bytecode. In Idea click View -> Show Bytecode
     // In there search for "spawn" (you need the quotes).
     //Spawning entities is skipped here. Even without this nothing would happen because entities from structures never
@@ -96,5 +185,5 @@ public abstract class ChunkStatusMixin {
     // This is just an optimization
     private static void SPAWN(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List chunks, Chunk chunk, CallbackInfo ci) {
         ci.cancel();
-    }
+    }*/
 }
