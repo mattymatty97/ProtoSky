@@ -15,11 +15,13 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.random.RandomSeed;
 import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
+import net.minecraft.world.HeightLimitView;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.*;
 import net.minecraft.world.chunk.light.LightingProvider;
+import protosky.interfaces.RetrogenHolder;
 import protosky.mixins.ProtoChunkAccessor;
 
 import java.util.Map;
@@ -30,9 +32,13 @@ import static protosky.ProtoSkySettings.LOGGER;
 public class WorldGenUtils
 {
     public static void deleteBlocks(Chunk chunk, ServerWorld world) {
+        //fixes for RetroGen
+        boolean had_retrogen = ((RetrogenHolder)chunk).wasBelowZeroRetrogen();
         //This loops through all sections (16x16x16) sections of a chunk and copies over the biome information, but not the blocks.
         ChunkSection[] sections = chunk.getSectionArray();
         for (int i = 0; i < sections.length; i++) {
+            if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(chunk.sectionIndexToCoord(i)))
+                continue;
             ChunkSection chunkSection = sections[i];
             PalettedContainer<BlockState> blockStateContainer = new PalettedContainer<>(Block.STATE_IDS, Blocks.AIR.getDefaultState(), PalettedContainer.PaletteProvider.BLOCK_STATE);
             ReadableContainer<RegistryEntry<Biome>> biomeContainer = chunkSection.getBiomeContainer();
@@ -41,6 +47,8 @@ public class WorldGenUtils
 
         //This removes all the block entities
         for (BlockPos bePos : chunk.getBlockEntityPositions()) {
+            if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(bePos.getY()))
+                continue;
             chunk.removeBlockEntity(bePos);
         }
 
@@ -54,12 +62,24 @@ public class WorldGenUtils
     }
 
     public static void genHeightMaps(Chunk chunk) {
+        boolean had_retrogen = ((RetrogenHolder)chunk).wasBelowZeroRetrogen();
         // defined in Heightmap class constructor
         int elementBits = MathHelper.ceilLog2(chunk.getHeight() + 1);
         long[] emptyHeightmap = new PackedIntegerArray(elementBits, 256).getData();
         for (Map.Entry<Heightmap.Type, Heightmap> heightmapEntry : chunk.getHeightmaps())
         {
-            heightmapEntry.getValue().setTo(chunk, heightmapEntry.getKey(), emptyHeightmap);
+            //fix heightmap if this was an old Chunk
+            if (had_retrogen){
+                Heightmap heightmap = heightmapEntry.getValue();
+                for (int x=0; x<16;x++){
+                    for (int z=0; z<16;z++){
+                        int val = heightmap.get(x,z);
+                        heightmap.set(x,z,(val>=BelowZeroRetrogen.BELOW_ZERO_VIEW.getTopY())?val:0);
+                    }
+                }
+            }else {
+                heightmapEntry.getValue().setTo(chunk, heightmapEntry.getKey(), emptyHeightmap);
+            }
         }
     }
 

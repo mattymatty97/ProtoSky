@@ -7,14 +7,19 @@
     "EnderDragonFightMixin",
     "ProtoChunkAccessor",
     "StructurePieceAccessor",
+    "debug.ThreadedAnvilChunkStorageMixin",
+    "height_fix.BelowZeroRetrogenMixin",
+    "height_fix.ChunkHeightAndBiomeFixMixin",
+    "height_fix.ChunkMixin",
+    "height_fix.ProtoChunkMixin",
     "StructureHelperInvokers.ChunkGeneratorInvoker",
     "StructureHelperInvokers.IglooGeneratorPieceInvoker",
+    "StructureHelperInvokers.OceanRuinGeneratorPieceInvoker",
     "StructureHelperInvokers.ShiftableStructurePieceInvoker",
     "StructureHelperInvokers.ShipwreckGeneratorPieceInvoker",
     "StructureHelperInvokers.SimpleStructurePieceInvoker",
     "StructureHelperInvokers.StructurePieceInvoker",
-    "StructureHelperInvokers.StructureStartInvoker",
-    "StructureHelperInvokers.OceanRuinGeneratorPieceInvoker"
+    "StructureHelperInvokers.StructureStartInvoker"
   ],
   "injectors": {
     "defaultRequire": 1
