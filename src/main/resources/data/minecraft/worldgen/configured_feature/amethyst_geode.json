@@ -77,7 +77,7 @@
         "min_inclusive": 1
       }
     },
-    "use_alternate_layer0_chance": 0.083,
+    "use_alternate_layer0_chance": 0.0083,
     "use_potential_placements_chance": 0.35
   }
 }

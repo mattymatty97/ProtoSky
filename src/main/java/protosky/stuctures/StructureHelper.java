@@ -456,6 +456,7 @@ public class StructureHelper {
         }
     }
 
+    //This is just PlacedFeature.generate(), but with a random added to make it so only 1/10 succeed at being placed
     private static boolean handleGeode(FeaturePlacementContext context, Random random, BlockPos pos, Chunk chunk, PlacedFeature placedFeature) {
         Stream<BlockPos> stream = Stream.of(pos);
         PlacedFeatureAccessor placedFeatureAccessor = (PlacedFeatureAccessor)(Object) placedFeature;

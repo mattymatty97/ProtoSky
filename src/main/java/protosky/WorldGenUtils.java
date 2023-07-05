@@ -61,7 +61,7 @@ public class WorldGenUtils
                 int z = buddingsZ.get(counter);
                 blockStateContainer.set(x, y, z, Registries.BLOCK.get(Identifier.tryParse("minecraft:budding_amethyst")).getDefaultState());
 
-                LOGGER.info("Amathyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
+                //LOGGER.info("Amathyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
                 counter++;
             }
             //LOGGER.info("Counter is " + counter);
