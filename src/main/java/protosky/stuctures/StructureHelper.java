@@ -60,20 +60,10 @@ public class StructureHelper {
     public interface NineArgumentFunction<ReturnType, Arg1Type, Arg2Type, Arg3Type, Arg4Type, Arg5Type, Arg6Type, Arg7Type, Arg8Type, Arg9Type> {
         ReturnType apply(Arg1Type arg1, Arg2Type arg2, Arg3Type arg3, Arg4Type arg4, Arg5Type arg5, Arg6Type arg6, Arg7Type arg7, Arg8Type arg8, Arg9Type arg9);
     }
-
-    @FunctionalInterface
-    public interface SixArgumentFunction<ReturnType, Arg1Type, Arg2Type, Arg3Type, Arg4Type, Arg5Type, Arg6Type> {
-        ReturnType apply(Arg1Type arg1, Arg2Type arg2, Arg3Type arg3, Arg4Type arg4, Arg5Type arg5, Arg6Type arg6);
-    }
-
-    private interface FeaturesHandlerType extends SixArgumentFunction<Boolean, StructureWorldAccess, ChunkGenerator, Random, BlockPos, Chunk, PlacedFeature> {}
-
     public static boolean ran = false;
     private static final List<Pair<Structure, NineArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>>> structuresAfterDelete = new ArrayList<>();
     private static final List<Pair<Structure, NineArgumentFunction<Boolean, StructurePiece, StructureWorldAccess, StructureAccessor, ChunkGenerator, Random, BlockBox, ChunkPos, BlockPos, Chunk>>> structuresBeforeDelete = new ArrayList<>();
 
-    //private static final List<Pair<Structure, SixArgumentFunction<Boolean, StructureWorldAccess, ChunkGenerator, Random, BlockPos, Chunk, PlacedFeature>>> featuresAfterDelete = new ArrayList<>();
-    private static final List<Pair<Identifier, FeaturesHandlerType>> featuresAfterDelete = new ArrayList<>();
 
     //These functions register all the structure handlers that get called in handleStructureStart(). The format of a handler
     // is a pair of a Registry<Structure> that has the structure to run on and a function that will get called on when
@@ -359,27 +349,13 @@ public class StructureHelper {
         );
 
     }
-    private static void registerFeaturesAfterDelete(WorldAccess world) {
-        Registry<PlacedFeature> featuresRegistry = world.getRegistryManager().get(RegistryKeys.PLACED_FEATURE);
-        //These are ran after all the blocks are deleted for the features that need that.
 
-        featuresAfterDelete.clear();
-        featuresAfterDelete.add(new MutablePair<>(
-                Identifier.tryParse("minecraft:amethyst_geode"),
-                (worldAccess, generator, random, pos, chunk, feature) -> {
-                    LOGGER.info("geode");
-
-                    return true;
-                })
-        );
-    }
     //This gets called by an entrypoint to refresh all the handlers as the registry key changes every time you open and close the world
     private static synchronized void fixRaceCondition(WorldAccess world) {
         if (!ran) {
             registerStructuresBeforeDelete(world);
             registerStructuresAfterDelete(world);
 
-            registerFeaturesAfterDelete(world);
             ran = true;
         }
     }
@@ -479,21 +455,6 @@ public class StructureHelper {
 
             structureStart.getStructure().postPlace(world, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, ((StructureStartInvoker) (Object) structureStart).getRealChildren());
         }
-    }
-
-    private static void handleFeature(StructureWorldAccess world, ChunkGenerator generator, Random random, BlockPos pos, Chunk chunk, PlacedFeature feature, FeaturesHandlerType handler) {
-        PlacedFeatureAccessor featureAccessor = (PlacedFeatureAccessor)(Object) feature;
-        FeaturePlacementContext context = new FeaturePlacementContext(world, generator, Optional.of(feature));
-        Stream<BlockPos> stream = Stream.of(pos);
-
-        for(PlacementModifier placementModifier : featureAccessor.getPlacementModifiers()) {
-            stream = stream.flatMap(posx -> placementModifier.getPositions(context, random, posx));
-        }
-
-        ConfiguredFeature<?, ?> configuredFeature = featureAccessor.getFeature().value();
-        stream.forEach(placedPos -> {
-            configuredFeature.generate(context.getWorld(), context.getChunkGenerator(), random, placedPos);
-        });
     }
 
     //This function loops through all structureStarts in a chunk, and runs handleStructureStart() on them. Normally in
@@ -616,15 +577,12 @@ public class StructureHelper {
 
                             try {
                                 world.setCurrentlyGeneratingStructureName(supplier2);
-
-                                /*for(Pair<Identifier, FeaturesHandlerType> featureFunctionPair : featuresAfterDelete) {
-                                    if(!beforeDelete && placedFeature.feature().matchesId(featureFunctionPair.getLeft())) {
-                                        //handleFeature(world, generator, chunkRandom, minChunkPos, chunk, placedFeature, featureFunctionPair.getRight());
-                                        placedFeature.generate(world, generator, chunkRandom, minChunkPos);
-                                        break;
-                                    }
-                                }*/
-                                placedFeature.generate(world, generator, chunkRandom, minChunkPos);
+                                if(beforeDelete && placedFeature.feature().matchesId(Identifier.tryParse("minecraft:amethyst_geode"))) {
+                                    //LOGGER.info("geode");
+                                    placedFeature.generate(world, generator, chunkRandom, minChunkPos);
+                                    //break;
+                                }
+                                //placedFeature.generate(world, generator, chunkRandom, minChunkPos);
                             } catch (Exception var30) {
                                 CrashReport crashReport2 = CrashReport.create(var30, "Feature placement");
                                 crashReport2.addElement("Feature").add("Description", supplier2::get);

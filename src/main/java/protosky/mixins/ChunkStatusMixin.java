@@ -1,5 +1,6 @@
 package protosky.mixins;
 
+import com.google.common.collect.ImmutableList;
 import com.mojang.datafixers.util.Either;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
@@ -12,26 +13,34 @@ import net.minecraft.world.Heightmap;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkStatus;
+import net.minecraft.world.gen.chunk.Blender;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import protosky.WorldGenUtils;
 import protosky.stuctures.PillarHelper;
 import protosky.stuctures.StructureHelper;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
-import static net.minecraft.world.chunk.ChunkStatus.POST_CARVER_HEIGHTMAPS;
+import static net.minecraft.world.chunk.ChunkStatus.*;
 import static protosky.ProtoSkySettings.LOGGER;
 
 @Mixin(ChunkStatus.class)
 public abstract class ChunkStatusMixin {
+    @Shadow @Final private ChunkStatus previous;
+
     //@Inject(method = "method_51375", at = @At("HEAD"), cancellable = true)
     //This is under ChunkStatus FEATURES. To find the inject method you need to read the bytecode. In Idea click View -> Show Bytecode
     // In there search for "features" (you need the quotes).
@@ -41,7 +50,6 @@ public abstract class ChunkStatusMixin {
         ChunkRegion chunkRegion = new ChunkRegion(world, chunks, targetStatus, 1);
         //This would normally generate structures, the blocks, not the bounding boxes.
         //generator.generateFeatures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion));
-        //StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, false);
         //Blender.tickLeavesAndFluids(chunkRegion, chunk);
 
         //I couldn't figure out how to generate the shulkers and elytras without also generating the blocks, so we generate the whole end city and delete the blocks
@@ -55,19 +63,24 @@ public abstract class ChunkStatusMixin {
 
         //Do it the other way around when generating the ow as to leave the end portal frames.
         } else {
+            //generator.generateFeatures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion));
+            //Blender.tickLeavesAndFluids(chunkRegion, chunk);
+
             //We need handle some structures before we delete blocks because they rely on blocks being there.
             StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, true);
             //Delete all the terrain and end cities. I couldn't figure out how to generate just the shulkers and elytra, so I resorted to just generating the whole thing and deleting the blocks.
-            WorldGenUtils.deleteBlocks(chunk, world);
+            //WorldGenUtils.deleteBlocks(chunk, world);
             //This generates all the structures
-            StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, false);
+            //StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, false);
         }
         //ci.cancel();
     }
+
     private static void afterFeaturesFunction(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List<Chunk> chunks, Chunk chunk) {
         LOGGER.info("After features");
     }
     private static ChunkStatus AFTER_FEATURES;
+
     @Inject(method = "register(Ljava/lang/String;Lnet/minecraft/world/chunk/ChunkStatus;IZLjava/util/EnumSet;Lnet/minecraft/world/chunk/ChunkStatus$ChunkType;Lnet/minecraft/world/chunk/ChunkStatus$GenerationTask;Lnet/minecraft/world/chunk/ChunkStatus$LoadTask;)Lnet/minecraft/world/chunk/ChunkStatus;",
             at = @At("HEAD"), cancellable = true)
     private static void register(String id,
@@ -80,14 +93,16 @@ public abstract class ChunkStatusMixin {
                                  ChunkStatus.LoadTask loadTask,
                                  CallbackInfoReturnable<ChunkStatus> cir
     ) {
-       if(id.equals("initialize_light")) {
+        if(id.equals("initialize_light")) {
+            //Task margin will request that amount of chunks around the one we are generating to at least be started. If they aren't the game will crash
             AFTER_FEATURES = ChunkStatusInvoker.invokeRegister("after_features", ChunkStatus.FEATURES, 8, POST_CARVER_HEIGHTMAPS, ChunkStatus.ChunkType.PROTOCHUNK, ChunkStatusMixin::afterFeaturesFunction);
             cir.setReturnValue(Registry.register(
                     Registries.CHUNK_STATUS,
                     id,
                     new ChunkStatus(
                             AFTER_FEATURES,
-                            taskMargin,
+                            //previous,
+                            8,
                             shouldAlwaysUpgrade,
                             heightMapTypes,
                             chunkType,
@@ -98,17 +113,21 @@ public abstract class ChunkStatusMixin {
                                     ChunkGenerator generator,
                                     StructureTemplateManager structureTemplateManager,
                                     ServerLightingProvider lightingProvider,
-                                    Function<Chunk, CompletableFuture<Either<Chunk, ChunkHolder.Unloaded >>> fullChunkConverter,
+                                    Function<Chunk, CompletableFuture<Either<Chunk, ChunkHolder.Unloaded>>> fullChunkConverter,
                                     List<Chunk> chunks,
                                     Chunk chunk
                             ) -> {
+                                WorldGenUtils.deleteBlocks(chunk, world);
+
+                                ChunkRegion chunkRegion = new ChunkRegion(world, chunks, targetStatus, 1);
+                                StructureHelper.handleStructures(chunkRegion, chunk, world.getStructureAccessor().forRegion(chunkRegion), generator, false);
+
                                 WorldGenUtils.genHeightMaps(chunk);
                                 return generationTask.doWork(targetStatus, executor, world, generator, structureTemplateManager, lightingProvider, fullChunkConverter, chunks, chunk);
                             },
                             loadTask)
             ));
-
-       } else if (id.equals("features")) {
+        } else if (id.equals("features")) {
            cir.setReturnValue(Registry.register(
                    Registries.CHUNK_STATUS,
                    id,
@@ -122,7 +141,6 @@ public abstract class ChunkStatusMixin {
                            loadTask
                    )
            ));
-
        } else if (id.equals("spawn")) {
            cir.setReturnValue(Registry.register(
                    Registries.CHUNK_STATUS,
@@ -158,6 +176,25 @@ public abstract class ChunkStatusMixin {
                    )
            ));
        }
+    }
+
+    @Inject(method = "<clinit>", at = @At("TAIL"), cancellable = false)
+    private static void clinit(CallbackInfo ci) {
+        DISTANCE_TO_STATUS = new ArrayList<ChunkStatus>();
+        DISTANCE_TO_STATUS.add(FULL);
+        DISTANCE_TO_STATUS.add(INITIALIZE_LIGHT);
+        DISTANCE_TO_STATUS.add(AFTER_FEATURES);
+        DISTANCE_TO_STATUS.add(CARVERS);
+        DISTANCE_TO_STATUS.add(BIOMES);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
+        DISTANCE_TO_STATUS.add(EMPTY);
     }
 
 /*    @Inject(method = "method_20614", at = @At("HEAD"), cancellable = false)

@@ -3,6 +3,7 @@ package protosky;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.structure.StructurePlacementData;
@@ -13,6 +14,7 @@ import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3i;
 import net.minecraft.util.math.random.RandomSeed;
 import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
 import net.minecraft.world.Heightmap;
@@ -22,6 +24,8 @@ import net.minecraft.world.chunk.*;
 import net.minecraft.world.chunk.light.LightingProvider;
 import protosky.mixins.ProtoChunkAccessor;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -34,7 +38,32 @@ public class WorldGenUtils
         ChunkSection[] sections = chunk.getSectionArray();
         for (int i = 0; i < sections.length; i++) {
             ChunkSection chunkSection = sections[i];
+
+            //List<Vec3i> buddings = new ArrayList<>();
+            List<Integer> buddingsX = new ArrayList<>();
+            List<Integer> buddingsY = new ArrayList<>();
+            List<Integer> buddingsZ = new ArrayList<>();
+
+            for(int x = 0; x < 16; x++) for(int z = 0; z < 16; z++) for(int y = 0; y < 16; y++) {
+                if (chunkSection.getBlockState(x,y,z).toString().contains("budding_amethyst")) {
+                    buddingsX.add(x);
+                    buddingsY.add(y);
+                    buddingsZ.add(z);
+                }
+            }
+
             PalettedContainer<BlockState> blockStateContainer = new PalettedContainer<>(Block.STATE_IDS, Blocks.AIR.getDefaultState(), PalettedContainer.PaletteProvider.BLOCK_STATE);
+
+            int counter = 0;
+            for(int x : buddingsX) {
+                int y = buddingsY.get(counter);
+                int z = buddingsZ.get(counter);
+                blockStateContainer.set(x, y, z, Registries.BLOCK.get(Identifier.tryParse("minecraft:budding_amethyst")).getDefaultState());
+
+                //LOGGER.info("Amathyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
+                counter++;
+            }
+
             ReadableContainer<RegistryEntry<Biome>> biomeContainer = chunkSection.getBiomeContainer();
             sections[i] = new ChunkSection(blockStateContainer, biomeContainer);
         }
