@@ -39,7 +39,7 @@ public class WorldGenUtils
         for (int i = 0; i < sections.length; i++) {
             ChunkSection chunkSection = sections[i];
 
-            //List<Vec3i> buddings = new ArrayList<>();
+            //This section finds all the budding_amethyst notes where they are
             List<Integer> buddingsX = new ArrayList<>();
             List<Integer> buddingsY = new ArrayList<>();
             List<Integer> buddingsZ = new ArrayList<>();
@@ -54,15 +54,17 @@ public class WorldGenUtils
 
             PalettedContainer<BlockState> blockStateContainer = new PalettedContainer<>(Block.STATE_IDS, Blocks.AIR.getDefaultState(), PalettedContainer.PaletteProvider.BLOCK_STATE);
 
+            //This section copies over all those budding_amethyst to keep them.
             int counter = 0;
             for(int x : buddingsX) {
                 int y = buddingsY.get(counter);
                 int z = buddingsZ.get(counter);
                 blockStateContainer.set(x, y, z, Registries.BLOCK.get(Identifier.tryParse("minecraft:budding_amethyst")).getDefaultState());
 
-                //LOGGER.info("Amathyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
+                LOGGER.info("Amathyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
                 counter++;
             }
+            //LOGGER.info("Counter is " + counter);
 
             ReadableContainer<RegistryEntry<Biome>> biomeContainer = chunkSection.getBiomeContainer();
             sections[i] = new ChunkSection(blockStateContainer, biomeContainer);
@@ -73,7 +75,7 @@ public class WorldGenUtils
             chunk.removeBlockEntity(bePos);
         }
 
-        //This should clear all the light sources
+        //This should clear all the light sources, but with the 1.20 lighting update it's not needed.
         /*ProtoChunk protoChunk = (ProtoChunk) chunk;
         ProtoChunkAccessor protoChunkAccessor = (ProtoChunkAccessor) protoChunk;
         LightingProvider lightingProvider = protoChunkAccessor.getLightingProvider();

@@ -27,6 +27,7 @@ import net.minecraft.util.math.random.RandomSeed;
 import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.StructureWorldAccess;
+import net.minecraft.world.World;
 import net.minecraft.world.WorldAccess;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.GenerationSettings;
@@ -319,8 +320,6 @@ public class StructureHelper {
                 (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
                     StructurePieceInvoker pieceInvoker = (StructurePieceInvoker) structurePiece;
 
-                    LOGGER.info("Ran buried treasure");
-
                     int i = worldAccess.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, pieceInvoker.getBoundingBox().getMinX(), pieceInvoker.getBoundingBox().getMinZ());
                     BlockPos.Mutable mutable = new BlockPos.Mutable(pieceInvoker.getBoundingBox().getMinX(), i, pieceInvoker.getBoundingBox().getMinZ());
 
@@ -457,6 +456,28 @@ public class StructureHelper {
         }
     }
 
+    private static boolean handleGeode(FeaturePlacementContext context, Random random, BlockPos pos, Chunk chunk, PlacedFeature placedFeature) {
+        Stream<BlockPos> stream = Stream.of(pos);
+        PlacedFeatureAccessor placedFeatureAccessor = (PlacedFeatureAccessor)(Object) placedFeature;
+
+        for(PlacementModifier placementModifier : placedFeatureAccessor.getPlacementModifiers()) {
+            stream = stream.flatMap(posx -> placementModifier.getPositions(context, random, posx));
+        }
+
+        ConfiguredFeature<?, ?> configuredFeature = placedFeatureAccessor.getFeature().value();
+        MutableBoolean mutableBoolean = new MutableBoolean();
+        stream.forEach(placedPos -> {
+            //LOGGER.info("no");
+            if(random.nextFloat() >= 0.9) {
+                //LOGGER.info("Yes" + chunk.getPos());
+                if (configuredFeature.generate(context.getWorld(), context.getChunkGenerator(), random, placedPos)) {
+                    mutableBoolean.setTrue();
+                }
+            }
+        });
+        return mutableBoolean.isTrue();
+    }
+
     //This function loops through all structureStarts in a chunk, and runs handleStructureStart() on them. Normally in
     // Minecraft instead of running handleStructureStart() on the StructureStart it would generate the StructureStart.
     // The function this is based off is called ChunkGenerator.generateFeatures(). It would also generate features (trees,
@@ -548,8 +569,9 @@ public class StructureHelper {
                         }
                     }
 
-                    //This part is for generating features that aren't needed. I keep it here for reference.
+                    //This part is for generating features.
                     if (k < i) {
+                        //Get all the features in this stage of generation
                         IntSet intSet = new IntArraySet();
 
                         for(RegistryEntry<Biome> registryEntry : set) {
@@ -569,6 +591,7 @@ public class StructureHelper {
                         Arrays.sort(is);
                         PlacedFeatureIndexer.IndexedFeatures indexedFeatures2 = list.get(k);
 
+                        //Loop through all the features we found
                         for(int o = 0; o < n; ++o) {
                             int p = is[o];
                             PlacedFeature placedFeature = indexedFeatures2.features().get(p);
@@ -577,9 +600,11 @@ public class StructureHelper {
 
                             try {
                                 world.setCurrentlyGeneratingStructureName(supplier2);
+                                //If it is a geode and it is before deleting place it down
                                 if(beforeDelete && placedFeature.feature().matchesId(Identifier.tryParse("minecraft:amethyst_geode"))) {
                                     //LOGGER.info("geode");
-                                    placedFeature.generate(world, generator, chunkRandom, minChunkPos);
+                                    //placedFeature.generate(world, generator, chunkRandom, minChunkPos);
+                                    handleGeode(new FeaturePlacementContext(world, generator, Optional.of(placedFeature)), chunkRandom, minChunkPos, chunk, placedFeature);
                                     //break;
                                 }
                                 //placedFeature.generate(world, generator, chunkRandom, minChunkPos);
