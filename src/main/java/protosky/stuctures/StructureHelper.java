@@ -469,7 +469,7 @@ public class StructureHelper {
         MutableBoolean mutableBoolean = new MutableBoolean();
         stream.forEach(placedPos -> {
             //LOGGER.info("no");
-            if(random.nextFloat() >= 0.9) {
+            if(random.nextFloat() >= 0.999) {
                 //LOGGER.info("Yes" + chunk.getPos());
                 if (configuredFeature.generate(context.getWorld(), context.getChunkGenerator(), random, placedPos)) {
                     mutableBoolean.setTrue();
