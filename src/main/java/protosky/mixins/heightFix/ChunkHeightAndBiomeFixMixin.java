@@ -1,4 +1,4 @@
-package protosky.mixins.height_fix;
+package protosky.mixins.heightFix;
 
 import com.llamalad7.mixinextras.injector.WrapWithCondition;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;

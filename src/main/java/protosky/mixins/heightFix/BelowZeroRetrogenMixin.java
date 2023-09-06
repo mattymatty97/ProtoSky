@@ -1,4 +1,4 @@
-package protosky.mixins.height_fix;
+package protosky.mixins.heightFix;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.minecraft.world.chunk.BelowZeroRetrogen;

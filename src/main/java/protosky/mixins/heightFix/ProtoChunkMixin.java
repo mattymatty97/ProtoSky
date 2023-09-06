@@ -1,4 +1,4 @@
-package protosky.mixins.height_fix;
+package protosky.mixins.heightFix;
 
 import net.minecraft.world.chunk.BelowZeroRetrogen;
 import net.minecraft.world.chunk.ProtoChunk;

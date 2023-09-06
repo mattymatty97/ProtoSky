@@ -1,4 +1,4 @@
-package protosky.mixins.height_fix;
+package protosky.mixins.heightFix;
 
 import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;

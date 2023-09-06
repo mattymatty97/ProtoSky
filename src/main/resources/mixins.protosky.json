@@ -9,11 +9,11 @@
     "PlacedFeatureAccessor",
     "ProtoChunkAccessor",
     "StructurePieceAccessor",
-    "debug.ThreadedAnvilChunkStorageMixin",
-    "height_fix.BelowZeroRetrogenMixin",
-    "height_fix.ChunkHeightAndBiomeFixMixin",
-    "height_fix.ChunkMixin",
-    "height_fix.ProtoChunkMixin",
+    "heightFix.BelowZeroRetrogenMixin",
+    "heightFix.ChunkHeightAndBiomeFixMixin",
+    "heightFix.ChunkMixin",
+    "heightFix.ProtoChunkMixin",
+
     "StructureHelperInvokers.ChunkGeneratorInvoker",
     "StructureHelperInvokers.IglooGeneratorPieceInvoker",
     "StructureHelperInvokers.OceanRuinGeneratorPieceInvoker",
@@ -22,6 +22,9 @@
     "StructureHelperInvokers.SimpleStructurePieceInvoker",
     "StructureHelperInvokers.StructurePieceInvoker",
     "StructureHelperInvokers.StructureStartInvoker"
+  ],
+  "offMixins" : [
+    "debug.ThreadedAnvilChunkStorageMixin"
   ],
   "injectors": {
     "defaultRequire": 1
