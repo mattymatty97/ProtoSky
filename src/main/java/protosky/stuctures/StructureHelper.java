@@ -93,6 +93,8 @@ public class StructureHelper {
 
                         for(int l = 0; l < frameHasEye.length; ++l) {
                             //FIX: This random needs to equal vanilla
+                            //I'm not going to fix this. It would require tracking down every time that random is called and calling it.
+                            // I am not willing to spend the time to get that right.
                             frameHasEye[l] = random.nextFloat() > 0.9F;
                             filled &= frameHasEye[l];
                         }
@@ -308,6 +310,14 @@ public class StructureHelper {
         structuresAfterDelete.add(new MutablePair<>(
                 structureRegistry.get(Identifier.tryParse("ocean_ruin_warm")),
                 structuresAfterDelete.get(structuresAfterDelete.size() - 1).getRight())
+        );
+        //This just generates the normal NBT Structures, but those have been cleared by a python script and are bundled
+        structuresAfterDelete.add(new MutablePair<>(
+            structureRegistry.get(Identifier.tryParse("ancient_city")),
+            (structurePiece, worldAccess, structureAccessor, chunkGenerator, random, chunkBox, chunkPos, pivot, chunk) -> {
+                //System.out.println("City");
+                return true;
+            })
         );
 
     }

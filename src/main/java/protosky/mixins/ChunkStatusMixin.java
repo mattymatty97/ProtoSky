@@ -39,11 +39,6 @@ import static protosky.ProtoSkySettings.LOGGER;
 
 @Mixin(ChunkStatus.class)
 public abstract class ChunkStatusMixin {
-    @Shadow
-    @Final
-    private ChunkStatus previous;
-
-
     //This is where features's and structures's blocks should get placed, now it's where the structures and features ProtoSky leaves get placed.
     private static void FEATURES(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List<Chunk> chunks, Chunk chunk/*, CallbackInfo ci*/) {
         Heightmap.populateHeightmaps(chunk, EnumSet.of(Heightmap.Type.MOTION_BLOCKING, Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, Heightmap.Type.OCEAN_FLOOR, Heightmap.Type.WORLD_SURFACE));
@@ -72,7 +67,7 @@ public abstract class ChunkStatusMixin {
     }
 
     //My own status that I couldn't make a stage for it working
-/*    private static void afterFeaturesFunction(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List<Chunk> chunks, Chunk chunk) {
+/*   private static void afterFeaturesFunction(ChunkStatus targetStatus, ServerWorld world, ChunkGenerator generator, List<Chunk> chunks, Chunk chunk) {
         LOGGER.info("After features");
     }
     private static ChunkStatus AFTER_FEATURES;*/
@@ -98,6 +93,7 @@ public abstract class ChunkStatusMixin {
         // that should be in its own stage, but I couldn't create one, so I use this one.
         if (id.equals("initialize_light")) {
             //AFTER_FEATURES = ChunkStatusInvoker.invokeRegister("after_features", ChunkStatus.FEATURES, 8, POST_CARVER_HEIGHTMAPS, ChunkStatus.ChunkType.PROTOCHUNK, ChunkStatusMixin::afterFeaturesFunction);
+
             cir.setReturnValue(Registry.register(
                     Registries.CHUNK_STATUS,
                     id,
@@ -119,6 +115,11 @@ public abstract class ChunkStatusMixin {
                                     List<Chunk> chunks,
                                     Chunk chunk
                             ) -> {
+
+                                //These get done here in the lighting stage not above in FEATURES because there are multiple threads that generate features or features gets called multiple times. One pass / thread
+                                // may place a structure in a chunk then delete the block and move the heightmap down to y=-64 when a second structure in the chunk on
+                                // a different thread still needs to be generated and requires the 'correct' heightmap and blocks.
+
                                 //This deletes all the blocks in a later stage than features because there were some issues where
                                 // Geodes placed in and deleted in the same stage would not get deleted if they went over chunk borders
                                 //It also runs and handlers that need to be run after delete
@@ -131,9 +132,6 @@ public abstract class ChunkStatusMixin {
 
                                 //We need to move the heightmaps down to the bottom of the world after structures have been generated because some rely on the heightmap to move.
                                 //This used to be in the unused 'HEIGHTMAPS' status, but in 1.20 this was removed. Now we're using INITIALIZE_LIGHT.
-                                //This gets done here not above in FEATURES because there are multiple threads that generate features. One thread
-                                // may place a structure in a chunk then move the heightmap down to y=-64 when a second structure in the chunk on
-                                // a different thread still needs to be generated and requires the 'correct' heightmap
                                 WorldGenUtils.genHeightMaps(chunk);
 
                                 //Run the normal INITIALIZE_LIGHT code because we still want that to work. All we want to do is make some code run before it
@@ -201,12 +199,13 @@ public abstract class ChunkStatusMixin {
 
     //This was my attempt to add my own stage, but it results in a stackoverflow whenever it is used to add a custom stage
     // or duplicate any status that is not STRUCTURE_STARTS. Add -Xss400K to your jvm args to make the stack fit in the 1024 line max stack trace length
-    /*@Inject(method = "<clinit>", at = @At("TAIL"), cancellable = false)
+    @Inject(method = "<clinit>", at = @At("TAIL"), cancellable = false)
     private static void clinit(CallbackInfo ci) {
         DISTANCE_TO_STATUS = new ArrayList<ChunkStatus>();
         DISTANCE_TO_STATUS.add(FULL);
         DISTANCE_TO_STATUS.add(INITIALIZE_LIGHT);
-        DISTANCE_TO_STATUS.add(AFTER_FEATURES);
+        //DISTANCE_TO_STATUS.add(FEATURES);
+        //DISTANCE_TO_STATUS.add(AFTER_FEATURES);
         DISTANCE_TO_STATUS.add(CARVERS);
         DISTANCE_TO_STATUS.add(BIOMES);
         DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
@@ -218,6 +217,6 @@ public abstract class ChunkStatusMixin {
         DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
         DISTANCE_TO_STATUS.add(STRUCTURE_STARTS);
         DISTANCE_TO_STATUS.add(EMPTY);
-    }*/
+    }
 }
 

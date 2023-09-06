@@ -1,4 +1,4 @@
-To check:
+To check before releasing:
 
 Deleting Blocks                                            X
 Strongholds                                                X
@@ -14,6 +14,16 @@ Entity placement skipping                                  X
 Heightmaps                                                 X
 Light Deleting (Lava)                                      X
 
+Skytech only:
+Ancient Cities
+  NBT structures updated to the latest version's
+  Have portal
+  Have one shrieker
+Geodes
+  JSON file is updated to latest version
+  Are 1000 times more rare
+  Have 10 times less budding amethyst
+  Do not get cut off at chunk borders
 
 Structure moves:
 
