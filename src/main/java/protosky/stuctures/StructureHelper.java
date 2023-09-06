@@ -25,12 +25,14 @@ import net.minecraft.util.math.random.ChunkRandom;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.util.math.random.RandomSeed;
 import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
+import net.minecraft.world.HeightLimitView;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.StructureWorldAccess;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldAccess;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.GenerationSettings;
+import net.minecraft.world.chunk.BelowZeroRetrogen;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.gen.GenerationStep;
@@ -46,6 +48,7 @@ import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import protosky.mixins.PlacedFeatureAccessor;
+import protosky.interfaces.RetrogenHolder;
 import protosky.mixins.StructureHelperInvokers.*;
 import protosky.mixins.StructurePieceAccessor;
 
@@ -658,8 +661,10 @@ public class StructureHelper {
     }
 
     public static void setBlockInChunk(Chunk chunk, BlockPos pos, BlockState state) {
-        if (chunk.getPos().equals(new ChunkPos(pos))) {
-            chunk.setBlockState(pos, state, false);
-        }
+        boolean had_retrogen = ((RetrogenHolder)chunk).wasBelowZeroRetrogen();
+        if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(pos.getY()))
+            if (chunk.getPos().equals(new ChunkPos(pos))) {
+                chunk.setBlockState(pos, state, false);
+            }
     }
 }
