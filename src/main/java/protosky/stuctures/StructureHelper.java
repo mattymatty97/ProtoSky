@@ -25,13 +25,10 @@ import net.minecraft.util.math.random.ChunkRandom;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.util.math.random.RandomSeed;
 import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
-import net.minecraft.world.HeightLimitView;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.StructureWorldAccess;
-import net.minecraft.world.World;
 import net.minecraft.world.WorldAccess;
 import net.minecraft.world.biome.Biome;
-import net.minecraft.world.biome.GenerationSettings;
 import net.minecraft.world.chunk.BelowZeroRetrogen;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkSection;
@@ -47,10 +44,11 @@ import net.minecraft.world.gen.structure.Structure;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import protosky.mixins.PlacedFeatureAccessor;
+import protosky.ProtoSkyMod;
+import protosky.mixins.accessors.PlacedFeatureAccessor;
 import protosky.interfaces.RetrogenHolder;
 import protosky.mixins.StructureHelperInvokers.*;
-import protosky.mixins.StructurePieceAccessor;
+import protosky.mixins.accessors.StructurePieceAccessor;
 
 import java.util.*;
 import java.util.function.Supplier;
@@ -452,7 +450,7 @@ public class StructureHelper {
                         }
                         stringBuilder.deleteCharAt(stringBuilder.length()-1);
                     }
-                    LOGGER.info(stringBuilder.toString());
+                    ProtoSkyMod.LOGGER.info(stringBuilder.toString());
                 }
 
             } else {
@@ -481,9 +479,9 @@ public class StructureHelper {
         ConfiguredFeature<?, ?> configuredFeature = placedFeatureAccessor.getFeature().value();
         MutableBoolean mutableBoolean = new MutableBoolean();
         stream.forEach(placedPos -> {
-            //LOGGER.info("no");
+            //ProtoSkyMod.LOGGER.info("no");
             if(random.nextFloat() >= 0.999) {
-                //LOGGER.info("Yes" + chunk.getPos());
+                //ProtoSkyMod.LOGGER.info("Yes" + chunk.getPos());
                 if (configuredFeature.generate(context.getWorld(), context.getChunkGenerator(), random, placedPos)) {
                     mutableBoolean.setTrue();
                 }
@@ -616,7 +614,7 @@ public class StructureHelper {
                                 world.setCurrentlyGeneratingStructureName(supplier2);
                                 //If it is a geode and it is before deleting place it down
                                 if(beforeDelete && placedFeature.feature().matchesId(Identifier.tryParse("minecraft:amethyst_geode"))) {
-                                    //LOGGER.info("geode");
+                                    //ProtoSkyMod.LOGGER.info("geode");
                                     //placedFeature.generate(world, generator, chunkRandom, minChunkPos);
                                     handleGeode(new FeaturePlacementContext(world, generator, Optional.of(placedFeature)), chunkRandom, minChunkPos, chunk, placedFeature);
                                     //break;
@@ -661,7 +659,7 @@ public class StructureHelper {
     }
 
     public static void setBlockInChunk(Chunk chunk, BlockPos pos, BlockState state) {
-        boolean had_retrogen = ((RetrogenHolder)chunk).wasBelowZeroRetrogen();
+        boolean had_retrogen = ((RetrogenHolder)chunk).protoSky$usesBelowZeroRetrogen();
         if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(pos.getY()))
             if (chunk.getPos().equals(new ChunkPos(pos))) {
                 chunk.setBlockState(pos, state, false);

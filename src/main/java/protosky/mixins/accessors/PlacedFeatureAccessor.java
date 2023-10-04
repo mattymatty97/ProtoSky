@@ -1,4 +1,4 @@
-package protosky.mixins;
+package protosky.mixins.accessors;
 
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.world.gen.feature.ConfiguredFeature;

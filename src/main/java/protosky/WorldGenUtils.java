@@ -9,35 +9,32 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.structure.StructurePlacementData;
 import net.minecraft.structure.StructureTemplate;
 import net.minecraft.structure.StructureTemplateManager;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3i;
 import net.minecraft.util.math.random.RandomSeed;
 import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
-import net.minecraft.world.HeightLimitView;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.*;
-import net.minecraft.world.chunk.light.LightingProvider;
 import protosky.interfaces.RetrogenHolder;
-import protosky.mixins.ProtoChunkAccessor;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static protosky.ProtoSkySettings.LOGGER;
-
 public class WorldGenUtils
 {
     public static void deleteBlocks(Chunk chunk, ServerWorld world) {
         //fixes for RetroGen
-        boolean had_retrogen = ((RetrogenHolder)chunk).wasBelowZeroRetrogen();
+        ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
+        boolean had_retrogen = ((RetrogenHolder)chunk).protoSky$usesBelowZeroRetrogen() && old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
         //This loops through all sections (16x16x16) sections of a chunk and copies over the biome information, but not the blocks.
         ChunkSection[] sections = chunk.getSectionArray();
         for (int i = 0; i < sections.length; i++) {
@@ -51,7 +48,7 @@ public class WorldGenUtils
             List<Integer> buddingsZ = new ArrayList<>();
 
             for(int x = 0; x < 16; x++) for(int z = 0; z < 16; z++) for(int y = 0; y < 16; y++) {
-                if (chunkSection.getBlockState(x,y,z).toString().contains("budding_amethyst")) {
+                if (chunkSection.getBlockState(x,y,z).getBlock() == Blocks.BUDDING_AMETHYST) {
                     buddingsX.add(x);
                     buddingsY.add(y);
                     buddingsZ.add(z);
@@ -65,12 +62,12 @@ public class WorldGenUtils
             for(int x : buddingsX) {
                 int y = buddingsY.get(counter);
                 int z = buddingsZ.get(counter);
-                blockStateContainer.set(x, y, z, Registries.BLOCK.get(Identifier.tryParse("minecraft:budding_amethyst")).getDefaultState());
+                blockStateContainer.set(x, y, z, Blocks.BUDDING_AMETHYST.getDefaultState());
 
-                //LOGGER.info("Amathyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
+                //ProtoSkyMod.LOGGER.info("Amethyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
                 counter++;
             }
-            //LOGGER.info("Counter is " + counter);
+            //ProtoSkyMod.LOGGER.info("Counter is " + counter);
 
             ReadableContainer<RegistryEntry<Biome>> biomeContainer = chunkSection.getBiomeContainer();
             sections[i] = new ChunkSection(blockStateContainer, biomeContainer);
@@ -93,7 +90,8 @@ public class WorldGenUtils
     }
 
     public static void genHeightMaps(Chunk chunk) {
-        boolean had_retrogen = ((RetrogenHolder)chunk).wasBelowZeroRetrogen();
+        ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
+        boolean had_retrogen = ((RetrogenHolder)chunk).protoSky$usesBelowZeroRetrogen() && old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
         // defined in Heightmap class constructor
         int elementBits = MathHelper.ceilLog2(chunk.getHeight() + 1);
         long[] emptyHeightmap = new PackedIntegerArray(elementBits, 256).getData();
@@ -105,11 +103,19 @@ public class WorldGenUtils
                 for (int x=0; x<16;x++){
                     for (int z=0; z<16;z++){
                         int val = heightmap.get(x,z);
-                        heightmap.set(x,z,(val>=BelowZeroRetrogen.BELOW_ZERO_VIEW.getTopY())?val:0);
+                        heightmap.set(x,z,(val>=BelowZeroRetrogen.BELOW_ZERO_VIEW.getTopY())?val:BelowZeroRetrogen.BELOW_ZERO_VIEW.getBottomY());
                     }
                 }
+                heightmapEntry.setValue(heightmap);
             }else {
-                heightmapEntry.getValue().setTo(chunk, heightmapEntry.getKey(), emptyHeightmap);
+                //or clear it if it was not
+                Heightmap heightmap = heightmapEntry.getValue();
+                for (int x=0; x<16;x++){
+                    for (int z=0; z<16;z++){
+                        heightmap.set(x,z,BelowZeroRetrogen.BELOW_ZERO_VIEW.getBottomY());
+                    }
+                }
+                heightmapEntry.setValue(heightmap);
             }
         }
     }

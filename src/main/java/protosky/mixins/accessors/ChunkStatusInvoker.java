@@ -1,4 +1,4 @@
-package protosky.mixins;
+package protosky.mixins.accessors;
 
 import com.mojang.datafixers.util.Either;
 import net.minecraft.server.world.ChunkHolder;

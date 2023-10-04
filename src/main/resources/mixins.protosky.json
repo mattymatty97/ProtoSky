@@ -3,17 +3,18 @@
   "package": "protosky.mixins",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "ChunkStatusInvoker",
+    "heightFix.ChunkSerializerMixin",
+    "accessors.ChunkStatusInvoker",
     "ChunkStatusMixin",
     "EnderDragonFightMixin",
-    "PlacedFeatureAccessor",
-    "ProtoChunkAccessor",
-    "StructurePieceAccessor",
+    "accessors.PlacedFeatureAccessor",
+    "accessors.ProtoChunkAccessor",
+    "accessors.StructurePieceAccessor",
+    "debug.ThreadedAnvilChunkStorageMixin",
     "heightFix.BelowZeroRetrogenMixin",
     "heightFix.ChunkHeightAndBiomeFixMixin",
     "heightFix.ChunkMixin",
     "heightFix.ProtoChunkMixin",
-
     "StructureHelperInvokers.ChunkGeneratorInvoker",
     "StructureHelperInvokers.IglooGeneratorPieceInvoker",
     "StructureHelperInvokers.OceanRuinGeneratorPieceInvoker",
@@ -23,7 +24,7 @@
     "StructureHelperInvokers.StructurePieceInvoker",
     "StructureHelperInvokers.StructureStartInvoker"
   ],
-  "offMixins" : [
+  "offMixins": [
     "debug.ThreadedAnvilChunkStorageMixin"
   ],
   "injectors": {
