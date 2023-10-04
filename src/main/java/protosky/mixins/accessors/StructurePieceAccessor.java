@@ -1,4 +1,4 @@
-package protosky.mixins;
+package protosky.mixins.accessors;
 
 import net.minecraft.structure.StructurePiece;
 import net.minecraft.util.BlockMirror;

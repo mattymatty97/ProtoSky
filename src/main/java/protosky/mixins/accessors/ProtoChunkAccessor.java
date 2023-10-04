@@ -1,4 +1,4 @@
-package protosky.mixins;
+package protosky.mixins.accessors;
 
 import net.minecraft.world.chunk.ProtoChunk;
 import net.minecraft.world.chunk.light.LightingProvider;

@@ -14,6 +14,6 @@ public class ProtoChunkMixin {
     @Inject(method = "setBelowZeroRetrogen", at = @At("HEAD"))
     private void onBelowZeroRetrogen(BelowZeroRetrogen belowZeroRetrogen, CallbackInfo ci){
         if (belowZeroRetrogen != null)
-            ((RetrogenHolder)this).setBelowZeroRetrogen(true);
+            ((RetrogenHolder)this).protoSky$setBelowZeroRetrogen(true);
     }
 }

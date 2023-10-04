@@ -1,7 +1,11 @@
 package protosky.interfaces;
 
-public interface RetrogenHolder {
-    boolean wasBelowZeroRetrogen();
+import net.minecraft.world.chunk.ChunkStatus;
 
-    void setBelowZeroRetrogen(boolean value);
+public interface RetrogenHolder {
+    boolean protoSky$usesBelowZeroRetrogen();
+    ChunkStatus protoSky$getPreviousStatus();
+
+    void protoSky$setBelowZeroRetrogen(boolean value);
+    void protoSky$setPreviousStatus(ChunkStatus status);
 }
