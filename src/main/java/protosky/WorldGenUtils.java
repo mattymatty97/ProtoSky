@@ -3,71 +3,42 @@ package protosky;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
+import net.minecraft.entity.EntityType;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtList;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.structure.StructurePlacementData;
-import net.minecraft.structure.StructureTemplate;
-import net.minecraft.structure.StructureTemplateManager;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.collection.PackedIntegerArray;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.random.RandomSeed;
-import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
 import net.minecraft.world.Heightmap;
-import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.*;
+import protosky.interfaces.GraceHolder;
 import protosky.interfaces.RetrogenHolder;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class WorldGenUtils
 {
     public static void deleteBlocks(Chunk chunk, ServerWorld world) {
         //fixes for RetroGen
         ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = ((RetrogenHolder)chunk).protoSky$usesBelowZeroRetrogen() && old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
         //This loops through all sections (16x16x16) sections of a chunk and copies over the biome information, but not the blocks.
         ChunkSection[] sections = chunk.getSectionArray();
+        Map<BlockPos, BlockState> gracedBlocks = ((GraceHolder)chunk).protoSky$getGracedBlocks();
         for (int i = 0; i < sections.length; i++) {
+            //avoid deleting blocks from pre 1.18 chunks
             if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(chunk.sectionIndexToCoord(i)))
                 continue;
+
+            //clear the chunk
             ChunkSection chunkSection = sections[i];
-
-            //This section finds all the budding_amethyst notes where they are
-            List<Integer> buddingsX = new ArrayList<>();
-            List<Integer> buddingsY = new ArrayList<>();
-            List<Integer> buddingsZ = new ArrayList<>();
-
-            for(int x = 0; x < 16; x++) for(int z = 0; z < 16; z++) for(int y = 0; y < 16; y++) {
-                if (chunkSection.getBlockState(x,y,z).getBlock() == Blocks.BUDDING_AMETHYST) {
-                    buddingsX.add(x);
-                    buddingsY.add(y);
-                    buddingsZ.add(z);
-                }
-            }
-
             PalettedContainer<BlockState> blockStateContainer = new PalettedContainer<>(Block.STATE_IDS, Blocks.AIR.getDefaultState(), PalettedContainer.PaletteProvider.BLOCK_STATE);
-
-            //This section copies over all those budding_amethyst to keep them.
-            int counter = 0;
-            for(int x : buddingsX) {
-                int y = buddingsY.get(counter);
-                int z = buddingsZ.get(counter);
-                blockStateContainer.set(x, y, z, Blocks.BUDDING_AMETHYST.getDefaultState());
-
-                //ProtoSkyMod.LOGGER.info("Amethyst at " + (x + chunk.getPos().getStartX()) + " " + (z + chunk.getPos().getStartZ()));
-                counter++;
-            }
-            //ProtoSkyMod.LOGGER.info("Counter is " + counter);
 
             ReadableContainer<RegistryEntry<Biome>> biomeContainer = chunkSection.getBiomeContainer();
             sections[i] = new ChunkSection(blockStateContainer, biomeContainer);
@@ -75,23 +46,25 @@ public class WorldGenUtils
 
         //This removes all the block entities
         for (BlockPos bePos : chunk.getBlockEntityPositions()) {
+            //avoid deleting blocks from pre 1.18 chunks
             if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(bePos.getY()))
                 continue;
-            chunk.removeBlockEntity(bePos);
+            //avoid deleting blockEntities that have been graced
+            if (!gracedBlocks.containsKey(bePos))
+                chunk.removeBlockEntity(bePos);
         }
 
-        //This should clear all the light sources, but with the 1.20 lighting update it's not needed.
-        /*ProtoChunk protoChunk = (ProtoChunk) chunk;
-        ProtoChunkAccessor protoChunkAccessor = (ProtoChunkAccessor) protoChunk;
-        LightingProvider lightingProvider = protoChunkAccessor.getLightingProvider();
-        LightingProvider lightingProvider = world.getLightingProvider();
-        lightingProvider.doLightUpdates();
-        chunk.getLightSources().clear();*/
     }
 
-    public static void genHeightMaps(Chunk chunk) {
+    public static final Set<Heightmap.Type> ALL_HEIGHTMAPS = Arrays.stream(Heightmap.Type.values()).collect(Collectors.toUnmodifiableSet());
+
+    public static void resetHeightMaps(Chunk chunk) {
+
+        Heightmap.populateHeightmaps(chunk , ALL_HEIGHTMAPS);
+
+        /*
         ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = ((RetrogenHolder)chunk).protoSky$usesBelowZeroRetrogen() && old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
         // defined in Heightmap class constructor
         int elementBits = MathHelper.ceilLog2(chunk.getHeight() + 1);
         long[] emptyHeightmap = new PackedIntegerArray(elementBits, 256).getData();
@@ -103,61 +76,76 @@ public class WorldGenUtils
                 for (int x=0; x<16;x++){
                     for (int z=0; z<16;z++){
                         int val = heightmap.get(x,z);
-                        heightmap.set(x,z,(val>=BelowZeroRetrogen.BELOW_ZERO_VIEW.getTopY())?val:BelowZeroRetrogen.BELOW_ZERO_VIEW.getBottomY());
+                        heightmap.set(x,z,(val>=BelowZeroRetrogen.BELOW_ZERO_VIEW.getTopY())?val:chunk.getBottomY());
                     }
                 }
                 heightmapEntry.setValue(heightmap);
-            }else {
+            } else {
                 //or clear it if it was not
                 Heightmap heightmap = heightmapEntry.getValue();
                 for (int x=0; x<16;x++){
                     for (int z=0; z<16;z++){
-                        heightmap.set(x,z,BelowZeroRetrogen.BELOW_ZERO_VIEW.getBottomY());
+                        heightmap.set(x,z,chunk.getBottomY());
                     }
                 }
                 heightmapEntry.setValue(heightmap);
             }
         }
+         */
     }
 
 
     public static void clearEntities(ProtoChunk chunk, ServerWorld world) {
+        ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
         // erase entities
-        if (!(world.getRegistryKey() == World.END)) {
+        if (had_retrogen) {
+            //erase only entities below y0
+            Iterator<NbtCompound> entityIterator = chunk.getEntities().iterator();
+            while (entityIterator.hasNext()) {
+                NbtCompound entity_nbt = entityIterator.next();
+                NbtList entity_pos_list = entity_nbt.getList("Pos", NbtElement.DOUBLE_TYPE);
+                BlockPos entity_pos = new BlockPos(MathHelper.floor(entity_pos_list.getDouble(0)), MathHelper.floor(entity_pos_list.getDouble(1)), MathHelper.floor(entity_pos_list.getDouble(2)));
+                if (!BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(entity_pos))
+                    entityIterator.remove();
+            }
+        }else{
+            //erase all
             chunk.getEntities().clear();
-        } else {
-            chunk.getEntities().removeIf(tag -> {
-                String id = tag.getString("id");
-                return !id.equals("minecraft:end_crystal") && !id.equals("minecraft:shulker") && !id.equals("minecraft:item_frame");
-            });
         }
+
     }
 
-    public static void genSpawnPlatform(Chunk chunk, ServerWorld world) {
-        StructureTemplateManager man = world.getStructureTemplateManager();
-        StructureTemplate s = null;
+    public static void restoreBlocks(Chunk chunk, ServerWorld world) {
+        ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
 
-        // Get structure for this dimension
-        if (world.getRegistryKey() == World.OVERWORLD) {
-            Optional<StructureTemplate> op = man.getTemplate(new Identifier("protosky:spawn_overworld"));
-            if (op.isPresent()) {
-                s = op.get();
+        Map<BlockPos, BlockState> gracedBlocks = ((GraceHolder)chunk).protoSky$getGracedBlocks();
+
+        gracedBlocks.forEach((blockPos, blockState) -> {
+            if (!had_retrogen || !BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(blockPos)){
+                chunk.setBlockState(blockPos,blockState,false);
             }
-        } else if (world.getRegistryKey() == World.NETHER) {
-            Optional<StructureTemplate> op = man.getTemplate(new Identifier("protosky:spawn_nether"));
-            if (op.isPresent()) {
-                s = op.get();
-            }
+        });
+    }
+
+    public static void restoreEntities(ProtoChunk chunk, ServerWorld world) {
+        ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
+
+        Set<NbtCompound> gracedEntities = ((GraceHolder) chunk).protoSky$getGracedEntities();
+
+        Stream<NbtCompound> entity_stream = gracedEntities.stream();
+
+        if (had_retrogen){
+            entity_stream = entity_stream.filter(entity_nbt -> {
+                NbtList entity_pos_list = entity_nbt.getList("Pos", NbtElement.DOUBLE_TYPE);
+                BlockPos entity_pos = new BlockPos(MathHelper.floor(entity_pos_list.getDouble(0)), MathHelper.floor(entity_pos_list.getDouble(1)), MathHelper.floor(entity_pos_list.getDouble(2)));
+                return !BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(entity_pos);
+            });
         }
-        if (s == null) return;
 
-        ChunkPos chunkPos = chunk.getPos();
-        BlockPos blockPos = new BlockPos(chunkPos.x * 16, 64, chunkPos.z * 16);
+        EntityType.streamFromNbt(entity_stream.toList(), world).forEach(world::spawnEntity);
 
-        StructurePlacementData structurePlacementData = new StructurePlacementData().setUpdateNeighbors(true);
-
-        int flags = 0;
-        s.place(world, blockPos, blockPos, structurePlacementData, new Xoroshiro128PlusPlusRandom(RandomSeed.getSeed()), flags);
-        world.setSpawnPos(blockPos.add(s.getSize().getX() / 2, s.getSize().getY() + 1, s.getSize().getZ() / 2), 0);
     }
 }
