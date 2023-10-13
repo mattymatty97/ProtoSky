@@ -11,6 +11,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public interface FeatureWorldMask {
     boolean hasGraces(Random random);
-    boolean canPlace(LocalRef<BlockState> blockState, Random random, Map<ProtoSkyMod.GraceConfig.BlockConfig, AtomicInteger> map);
-    boolean canSpawn(LocalRef<Entity> entity, Random random);
+    boolean canPlace(LocalRef<BlockState> blockState, Random random, Map<ProtoSkyMod.GraceConfig.SubConfig,AtomicInteger> map);
+    boolean canSpawn(LocalRef<Entity> entity, Random random, Map<ProtoSkyMod.GraceConfig.SubConfig,AtomicInteger> map);
 }

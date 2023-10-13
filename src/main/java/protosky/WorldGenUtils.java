@@ -24,6 +24,13 @@ import java.util.stream.Stream;
 
 public class WorldGenUtils
 {
+
+    /**
+     * Empty all chunkSection of the provided chunk.
+     * Skip sections above y0 if this was a datafixed Chunk
+     * @param chunk the chunk to clear
+     * @param world the world the chunk belongs to
+     */
     public static void deleteBlocks(Chunk chunk, ServerWorld world) {
         //fixes for RetroGen
         ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
@@ -58,47 +65,26 @@ public class WorldGenUtils
 
     public static final Set<Heightmap.Type> ALL_HEIGHTMAPS = Arrays.stream(Heightmap.Type.values()).collect(Collectors.toUnmodifiableSet());
 
+    /**
+     * Regenerate the Heightmaps of the specified chunk
+     * @param chunk the chunk to edit
+     */
     public static void resetHeightMaps(Chunk chunk) {
 
         Heightmap.populateHeightmaps(chunk , ALL_HEIGHTMAPS);
 
-        /*
-        ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
-        // defined in Heightmap class constructor
-        int elementBits = MathHelper.ceilLog2(chunk.getHeight() + 1);
-        long[] emptyHeightmap = new PackedIntegerArray(elementBits, 256).getData();
-        for (Map.Entry<Heightmap.Type, Heightmap> heightmapEntry : chunk.getHeightmaps())
-        {
-            //fix heightmap if this was an old Chunk
-            if (had_retrogen){
-                Heightmap heightmap = heightmapEntry.getValue();
-                for (int x=0; x<16;x++){
-                    for (int z=0; z<16;z++){
-                        int val = heightmap.get(x,z);
-                        heightmap.set(x,z,(val>=BelowZeroRetrogen.BELOW_ZERO_VIEW.getTopY())?val:chunk.getBottomY());
-                    }
-                }
-                heightmapEntry.setValue(heightmap);
-            } else {
-                //or clear it if it was not
-                Heightmap heightmap = heightmapEntry.getValue();
-                for (int x=0; x<16;x++){
-                    for (int z=0; z<16;z++){
-                        heightmap.set(x,z,chunk.getBottomY());
-                    }
-                }
-                heightmapEntry.setValue(heightmap);
-            }
-        }
-         */
     }
 
-
+    /**
+     * Remove all entites from the provided chunk
+     * skip entities above y0 if the chunk was datafixed
+     * @param chunk the chunk to clear
+     * @param world the world the chunk belongs to
+     */
     public static void clearEntities(ProtoChunk chunk, ServerWorld world) {
         ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
         boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
-        // erase entities
+
         if (had_retrogen) {
             //erase only entities below y0
             Iterator<NbtCompound> entityIterator = chunk.getEntities().iterator();
@@ -116,6 +102,12 @@ public class WorldGenUtils
 
     }
 
+    /**
+     * Place the graced blocks back into the chunk
+     * Limit to blocks below y0 if this chunk is datafixed
+     * @param chunk the chunk to edit
+     * @param world the world the chunk belongs to
+     */
     public static void restoreBlocks(Chunk chunk, ServerWorld world) {
         ChunkStatus old_status = ((RetrogenHolder)chunk).protoSky$getPreviousStatus();
         boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
@@ -129,6 +121,12 @@ public class WorldGenUtils
         });
     }
 
+    /**
+     * Place the graced entities back into the chunk
+     * Limit to entities below y0 if this chunk is datafixed
+     * @param chunk the chunk to edit
+     * @param world the world the chunk belongs to
+     */
     public static void restoreEntities(ProtoChunk chunk, ServerWorld world) {
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
         boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
@@ -138,6 +136,7 @@ public class WorldGenUtils
         Stream<NbtCompound> entity_stream = gracedEntities.stream();
 
         if (had_retrogen){
+            //filter out entities above y0
             entity_stream = entity_stream.filter(entity_nbt -> {
                 NbtList entity_pos_list = entity_nbt.getList("Pos", NbtElement.DOUBLE_TYPE);
                 BlockPos entity_pos = new BlockPos(MathHelper.floor(entity_pos_list.getDouble(0)), MathHelper.floor(entity_pos_list.getDouble(1)), MathHelper.floor(entity_pos_list.getDouble(2)));

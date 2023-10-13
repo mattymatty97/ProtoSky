@@ -1,7 +1,6 @@
 package protosky.mixins.worldgen.features;
 
 import com.llamalad7.mixinextras.sugar.Local;
-import com.llamalad7.mixinextras.sugar.Share;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
@@ -20,7 +19,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import protosky.ProtoSkyMod;
@@ -40,19 +38,19 @@ public abstract class ChunkRegionMixin {
     private FeatureWorldMask mask = null;
 
     @Unique
-    private Random chunkRandom = new Random();
+    private Random graceRandom = new Random();
 
     @Unique
     private final Set<BlockPos> blocks_to_rollback = new HashSet<>();
     @Unique
-    private final Map<ProtoSkyMod.GraceConfig.BlockConfig, AtomicInteger> structure_map = new HashMap<>();
+    private final Map<ProtoSkyMod.GraceConfig.SubConfig, AtomicInteger> structure_map = new HashMap<>();
 
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void onInit(ServerWorld world, List<Chunk> chunks, ChunkStatus status, int placementRadius, CallbackInfo ci){
         ChunkPos pos = this.centerPos.getPos();
         long seed = world.getSeed() + pos.hashCode();
-        chunkRandom = new Random(seed);
+        graceRandom = new Random(seed);
     }
 
 
@@ -60,7 +58,7 @@ public abstract class ChunkRegionMixin {
     private void checkSetBlock(BlockPos pos, BlockState state, int flags, int maxUpdateDepth, CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true) LocalRef<BlockState> forced_state){
         if (mask!=null) {
             Chunk chunk = ((WorldView) this).getChunk(pos);
-            if (mask.canPlace(forced_state, chunkRandom, structure_map)) {
+            if (mask.canPlace(forced_state, graceRandom, structure_map)) {
                 ((GraceHolder) chunk).protoSky$putGracedBlock(pos, forced_state.get());
                 blocks_to_rollback.remove(pos.toImmutable());
                 return;
@@ -76,7 +74,7 @@ public abstract class ChunkRegionMixin {
     private void checkSpawnEntity(Entity entity, CallbackInfoReturnable<Boolean> cir, @Local(argsOnly = true) LocalRef<Entity> forced_entity){
         if (mask!=null) {
             Chunk chunk = ((WorldView) this).getChunk(entity.getBlockPos());
-            if (mask.canSpawn(forced_entity, chunkRandom)) {
+            if (mask.canSpawn(forced_entity, graceRandom, structure_map)) {
                 ((GraceHolder) chunk).protoSky$putGracedEntity(forced_entity.get());
                 return;
             }
@@ -97,7 +95,7 @@ public abstract class ChunkRegionMixin {
         }else {
             String identifier = structureName.get();
             FeatureWorldMask mask = ProtoSkyMod.baked_masks.getOrDefault(identifier, ProtoSkyMod.EMPTY_MASK);
-            if (mask.hasGraces(chunkRandom))
+            if (mask.hasGraces(graceRandom))
                 this.mask = mask;
             else
                 this.mask = ProtoSkyMod.EMPTY_MASK;

@@ -55,12 +55,12 @@ public class ProtoSkyMod implements ModInitializer {
         }
 
         @Override
-        public boolean canPlace(LocalRef<BlockState> blockStateRef, Random random, Map<GraceConfig.BlockConfig,AtomicInteger> map) {
+        public boolean canPlace(LocalRef<BlockState> blockStateRef, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
             return false;
         }
 
         @Override
-        public boolean canSpawn(LocalRef<Entity> entityRef, Random random) {
+        public boolean canSpawn(LocalRef<Entity> entityRef, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
             return false;
         }
     };
@@ -87,24 +87,36 @@ public class ProtoSkyMod implements ModInitializer {
 
         @Override
         public void reload(ResourceManager manager) {
+            //forget old data
             baked_masks.clear();
+
+            //get all json files in the grace tree
             Map<Identifier, Resource> resourceMap = manager.findResources(getFabricId().getPath(), id -> id.getPath().endsWith(".json"));
+
+            //parse each json
             for (Map.Entry<Identifier, Resource> entry : resourceMap.entrySet()){
                 try(Reader reader = entry.getValue().getReader()) {
-                    // Consume the stream however you want, medium, rare, or well done.
+                    // cast the json to the Config class
                     GraceConfig config = JSON_READER.fromJson(reader, GraceConfig.class);
 
+                    //obtain this config name/key
                     String name = config.override_name;
-
                     if (name == null || name.isEmpty() || name.isBlank()){
+                        //generate the name based on the path the file was
                         String currPath = entry.getKey().getPath();
+                        //remove the prefix from the path
                         String main_path = currPath.substring(IDENTIFIER.getPath().length());
+                        //remove extra / if present
                         if (main_path.startsWith("/"))
                             main_path = main_path.substring(1);
+                        //obtain the tree structure
                         String[] sections = main_path.split("/");
                         if (sections.length > 1){
+                            //first folder is the vanilla namespace
                             String namespace = sections[0];
+                            //last section is the filename, we trim it from the extension to get the vanilla resource name
                             String resourceName = sections[sections.length - 1].replace(".json", "");
+                            //generate the vanilla resource path from the remaining parts
                             List<String> subSections = Arrays.stream(sections).skip(1).limit(sections.length - 2).toList();
                             Identifier registry = new Identifier(namespace, Strings.join(subSections, "/"));
                             Identifier resource = new Identifier(namespace, resourceName);
@@ -116,30 +128,34 @@ public class ProtoSkyMod implements ModInitializer {
                     //do not bother if it was already set
                     if (!ProtoSkyMod.baked_masks.containsKey(name)) {
 
-                        //bake the checks
+                        //bake the probability check
                         Function<Random, Boolean> mainCheck = getProbabilityCheck(config.probability);
 
-                        BiFunction<Random, LocalRef<Entity>, Boolean> entityCheck;
-
+                        //if there is an entity section iterate over it
+                        TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> entityCheck;
                         if (config.entities != null) {
-                            BiFunction<Random, LocalRef<Entity>, Boolean> tmpEntityCheck = (r, ref) -> false;
+                            //start with an always false check to fail in case of empty list
+                            TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> tmpEntityCheck = (r, ref, map) -> false;
                             for (GraceConfig.EntityConfig entityConfig : config.entities) {
-                                BiFunction<Random, LocalRef<Entity>, Boolean> oldEntityCheck = tmpEntityCheck;
-                                BiFunction<Random, LocalRef<Entity>, Boolean> currEntityCheck = makeEntityCheck(entityConfig);
-                                tmpEntityCheck = (r, ref) -> oldEntityCheck.apply(r, ref) || currEntityCheck.apply(r, ref);
+                                TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> oldEntityCheck = tmpEntityCheck;
+                                TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> currEntityCheck = makeEntityCheck(entityConfig);
+                                //append the new check in or with the previous ones
+                                tmpEntityCheck = (r, ref, map) -> oldEntityCheck.apply(r, ref, map) || currEntityCheck.apply(r, ref, map);
                             }
                             entityCheck = tmpEntityCheck;
                         } else {
-                            entityCheck = (r, ref) -> true;
+                            entityCheck = (r, ref, map) -> true;
                         }
 
-                        TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.BlockConfig,AtomicInteger>, Boolean> blockCheck;
-
+                        //if there is a block check
+                        TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> blockCheck;
                         if (config.blocks != null) {
-                            TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.BlockConfig,AtomicInteger>, Boolean> tmpBlockCheck = (r, ref, map) -> false;
+                            //start with an always false check to fail in case of empty list
+                            TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> tmpBlockCheck = (r, ref, map) -> false;
                             for (GraceConfig.BlockConfig blockConfig : config.blocks) {
-                                TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.BlockConfig,AtomicInteger>, Boolean> oldBlockCheck = tmpBlockCheck;
-                                TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.BlockConfig,AtomicInteger>, Boolean> currBlockCheck = makeBlockCheck(blockConfig);
+                                TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> oldBlockCheck = tmpBlockCheck;
+                                TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> currBlockCheck = makeBlockCheck(blockConfig);
+                                //append the new check in or with the previous ones
                                 tmpBlockCheck = (r, ref, map) -> oldBlockCheck.apply(r, ref, map) || currBlockCheck.apply(r, ref, map);
                             }
                             blockCheck = tmpBlockCheck;
@@ -147,6 +163,7 @@ public class ProtoSkyMod implements ModInitializer {
                             blockCheck = (r, ref, map) -> true;
                         }
 
+                        //combine all the backed checks into the Mask Class
                         FeatureWorldMask mask = new FeatureWorldMask() {
                             @Override
                             public boolean hasGraces(Random random) {
@@ -154,16 +171,17 @@ public class ProtoSkyMod implements ModInitializer {
                             }
 
                             @Override
-                            public boolean canPlace(LocalRef<BlockState> blockState, Random random, Map<GraceConfig.BlockConfig,AtomicInteger> map) {
+                            public boolean canPlace(LocalRef<BlockState> blockState, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
                                 return blockCheck.apply(random, blockState, map);
                             }
 
                             @Override
-                            public boolean canSpawn(LocalRef<Entity> entity, Random random) {
-                                return entityCheck.apply(random, entity);
+                            public boolean canSpawn(LocalRef<Entity> entity, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
+                                return entityCheck.apply(random, entity, map);
                             }
                         };
 
+                        //and add the mask to the map
                         ProtoSkyMod.baked_masks.put(name, mask);
                     }
                 } catch(Throwable t) {
@@ -172,83 +190,101 @@ public class ProtoSkyMod implements ModInitializer {
             }
         }
 
+        /**
+         * Bake the check for the specified entity Object
+         * @param entityConfig the config for the current check
+         * @return the baked function to be checked against
+         */
         @NotNull
-        private static BiFunction<Random, LocalRef<Entity>, Boolean> makeEntityCheck(GraceConfig.EntityConfig entityConfig) {
-            BiFunction<Random, LocalRef<Entity>, Boolean> currEntityCheck;
+        private static TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> makeEntityCheck(GraceConfig.EntityConfig entityConfig) {
+            TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> currEntityCheck;
 
+            //if it has a name check
             Function<String,Boolean> nameCheck;
             if (entityConfig.entity != null)
+                //check if the entity id matches the one in the config
                 nameCheck = name -> name.equals(entityConfig.entity);
             else {
                 nameCheck = null;
             }
 
+            //generate the probability check
             Function<Random, Boolean> probabilityCheck = getProbabilityCheck(entityConfig.probability);
 
-            Supplier<Boolean> count_check;
+            //if it has a max_count check
+            Function<Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> count_check;
             if (entityConfig.max_count != null && entityConfig.max_count >= 0){
-                AtomicInteger counter = new AtomicInteger();
-                count_check = () -> counter.getAndIncrement() < entityConfig.max_count;
+                //obtain the counter from the map and increment it
+                count_check = (map) -> map.computeIfAbsent(entityConfig, k -> new AtomicInteger()).getAndIncrement() < entityConfig.max_count;
             }else{
                 count_check = null;
             }
 
-            currEntityCheck = (r, ref) ->
+            //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
+            currEntityCheck = (r, ref, map) ->
                     ( (nameCheck!=null) ? nameCheck.apply(Registries.ENTITY_TYPE.getId(ref.get().getType()).toString()) : true ) &&
                     ( (probabilityCheck!=null) ? probabilityCheck.apply(r) : true ) &&
-                    ( (count_check!=null) ? count_check.get() : true );
+                    ( (count_check!=null) ? count_check.apply(map) : true );
             return currEntityCheck;
         }
+
+
+        /**
+         * Bake the check for the specified BlockState Object
+         * @param blockConfig the config for the current check
+         * @return the baked function to be checked against
+         */
         @NotNull
-        private static TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.BlockConfig,AtomicInteger>, Boolean> makeBlockCheck(GraceConfig.BlockConfig blockConfig) {
+        private static TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> makeBlockCheck(GraceConfig.BlockConfig blockConfig) {
 
-            TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.BlockConfig,AtomicInteger>, Boolean> currBlockCheck;
+            TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig, AtomicInteger>, Boolean> currBlockCheck;
 
+            //if it has a name check
             Function<String,Boolean> nameCheck;
             if (blockConfig.block != null)
+                //check if the block id matches the one in the config
                 nameCheck = name -> name.equals(blockConfig.block);
             else {
                 nameCheck = null;
             }
 
 
-
+            //generate the probability check
             Function<Random, Boolean> probabilityCheck = getProbabilityCheck(blockConfig.probability);
 
 
-
-            Function<Map<GraceConfig.BlockConfig,AtomicInteger>, Boolean> count_check;
+            //if it has a max_count check
+            Function<Map<GraceConfig.SubConfig, AtomicInteger>, Boolean> count_check;
             if (blockConfig.max_count != null && blockConfig.max_count >= 0){
+                //obtain the counter from the map and increment it
                 count_check = (map) -> map.computeIfAbsent(blockConfig, b ->new AtomicInteger() ).getAndIncrement() < blockConfig.max_count;
             }else{
                 count_check = null;
             }
 
-
-
+            //if there are blockstates to be checked
             Function<BlockState,Boolean> stateCheck;
             if (blockConfig.states != null){
-
+                //start with true if no blockstates have to be checked
                 Function<BlockState,Boolean> tmpStateCheck = s -> true;
+                //for each blockstate
                 for (GraceConfig.BlockConfig.StateConfig stateConfig : blockConfig.states){
                     Function<BlockState,Boolean> currStateCheck = tmpStateCheck;
-                    tmpStateCheck = blockState -> {
-                        if (currStateCheck.apply(blockState)) {
-                            Collection<Property<?>> properties = blockState.getProperties();
-                            Optional<Property<?>> optionalProperty = properties.stream().filter(p -> p.getName().equals(stateConfig.key)).findAny();
-                            if (optionalProperty.isPresent()) {
-                                return blockState.get(optionalProperty.get()).equals(stateConfig.value);
-                            }
-                        }
-                        return false;
+                    //check if the blockstate beeing placed has the same value as the Config
+                    Function<BlockState,Boolean> localStateCheck = blockState -> {
+                        Collection<Property<?>> properties = blockState.getProperties();
+                        Optional<Property<?>> optionalProperty = properties.stream().filter(p -> p.getName().equals(stateConfig.key)).findAny();
+                        return optionalProperty.filter(property -> blockState.get(property).equals(stateConfig.value)).isPresent();
                     };
+                    //combine the checks in AND with each other
+                    tmpStateCheck = blockState -> currStateCheck.apply(blockState) && localStateCheck.apply(blockState);
                 }
                 stateCheck = tmpStateCheck;
             }else{
                 stateCheck = null;
             }
 
-            /*
+            /* //the code for forcing a blockstate is commented because I was not able to make the castings work as intended
             Consumer<LocalRef<BlockState>> blockStateProcessor;
             if (blockConfig.forced_states != null){
                 Consumer<LocalRef<BlockState>> tmpBlockStateProcessor = ref -> {
@@ -275,6 +311,7 @@ public class ProtoSkyMod implements ModInitializer {
             }
             */
 
+            //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
             currBlockCheck = (r, ref, map) -> {
                         boolean result =
                         ( (nameCheck!=null) ? nameCheck.apply(Registries.BLOCK.getId(ref.get().getBlock()).toString()) : true ) &&
@@ -288,40 +325,57 @@ public class ProtoSkyMod implements ModInitializer {
             return currBlockCheck;
         }
 
-        @Nullable
-        private static Function<Random, Boolean> getProbabilityCheck(Double blockConfig) {
+
+        /**
+         * prepare the probability check given the Double value
+         * @param probability the probability to be checked against. range -> [0.0, 1.0]
+         * @return the probability check
+         */
+        private static Function<Random, Boolean> getProbabilityCheck(Double probability) {
             Function<Random, Boolean> probabilityCheck;
-            if (blockConfig != null) {
-                if (blockConfig <= 1.0 && blockConfig >= 0.0)
-                    probabilityCheck = random -> random.nextFloat() < blockConfig;
-                else if (blockConfig <= 0.0)
+            if (probability != null) {
+                if (probability <= 1.0 && probability >= 0.0)
+                    probabilityCheck = random -> random.nextFloat() < probability;
+                else if (probability <= 0.0)
                     probabilityCheck = random -> false;
                 else
-                    probabilityCheck = null;
+                    probabilityCheck = r -> true;
             } else {
-                probabilityCheck = null;
+                probabilityCheck = r -> true;
             }
             return probabilityCheck;
         }
     }
 
+    /**
+     * This class represents the json file of the Graces
+     */
     public static class GraceConfig{
 
+        //forced map key to be used in case of modded structures/features
         protected String override_name;
 
+        //the probability of this specific structure to be placed in the world ( this is on top of vanilla rarity )
         protected Double probability;
 
+        //the list of blocks that have to survive the pruning
         protected Collection<BlockConfig> blocks;
 
+        //the list of entities that have to survive the pruning
         protected Collection<EntityConfig> entities;
 
-        public static class BlockConfig{
+        /**
+         * This class holds the information for graced BlockStates
+         */
+        public static class BlockConfig extends SubConfig{
 
+            //the block id to save
             protected String block;
 
-            protected Double probability;
-            protected Integer max_count;
+            //the list of state keys to be checked
             protected Collection<StateConfig<?>> states;
+
+            //list of state keys to be forcefully set if this survives the checks
             protected Collection<StateConfig<?>> forced_states;
 
             public static class StateConfig<T extends Comparable<T>>{
@@ -332,11 +386,19 @@ public class ProtoSkyMod implements ModInitializer {
             }
         }
 
-        public static class EntityConfig{
+        public static class EntityConfig extends SubConfig{
 
+            //the entity id to save
             protected String entity;
 
+        }
+
+        public static class SubConfig{
+            //the probability of this specific blokc/entity to be placed in the world
             protected Double probability;
+
+            //the maximum amount of blocks/entities matching this rule to be placed in the world
+            //( this count is valid only for a 3x3 chunk area, structures larger than might not conform to this rule )
             protected Integer max_count;
         }
 

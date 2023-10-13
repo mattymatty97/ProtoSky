@@ -21,7 +21,7 @@ import protosky.interfaces.RetrogenHolder;
 @Mixin(ChunkSerializer.class)
 public class ChunkSerializerMixin {
     @Inject(method = "deserialize", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/chunk/ProtoChunk;setStatus(Lnet/minecraft/world/chunk/ChunkStatus;)V", shift = At.Shift.BEFORE))
-    private static void fix_incomplete(ServerWorld world, PointOfInterestStorage poiStorage, ChunkPos chunkPos, NbtCompound nbt, CallbackInfoReturnable<ProtoChunk> cir, @Local ProtoChunk protoChunk){
+    private static void deserialize_datafix_status(ServerWorld world, PointOfInterestStorage poiStorage, ChunkPos chunkPos, NbtCompound nbt, CallbackInfoReturnable<ProtoChunk> cir, @Local ProtoChunk protoChunk){
         if (nbt.contains(ProtoSkyMod.OLD_STATUS_TAG)){
             try {
                 ChunkStatus old_status = ChunkStatus.byId(nbt.getString("protosky_old_status"));
@@ -34,9 +34,11 @@ public class ChunkSerializerMixin {
 
 
     @ModifyReturnValue(method = "serialize", at=@At("RETURN"))
-    private static NbtCompound save_graces(NbtCompound nbt, ServerWorld world, Chunk chunk){
-        if (((RetrogenHolder) chunk).protoSky$getPreviousStatus() != ChunkStatus.EMPTY){
-            nbt.putString(ProtoSkyMod.OLD_STATUS_TAG,((RetrogenHolder) chunk).protoSky$getPreviousStatus().toString());
+    private static NbtCompound serialize_datafix_status(NbtCompound nbt, ServerWorld world, Chunk chunk){
+        if (!chunk.getStatus().isAtLeast(ChunkStatus.LIGHT)) {
+            if (((RetrogenHolder) chunk).protoSky$getPreviousStatus() != ChunkStatus.EMPTY) {
+                nbt.putString(ProtoSkyMod.OLD_STATUS_TAG, ((RetrogenHolder) chunk).protoSky$getPreviousStatus().toString());
+            }
         }
         return nbt;
     }

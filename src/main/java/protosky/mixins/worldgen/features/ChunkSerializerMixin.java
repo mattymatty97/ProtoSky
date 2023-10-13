@@ -24,7 +24,7 @@ import java.util.Map;
 @Mixin(ChunkSerializer.class)
 public abstract class ChunkSerializerMixin {
     @ModifyReturnValue(method = "deserialize", at = @At("RETURN"))
-    private static ProtoChunk read_graces(ProtoChunk protoChunk, ServerWorld world, PointOfInterestStorage poiStorage, ChunkPos chunkPos, NbtCompound nbt){
+    private static ProtoChunk deserialize_graces(ProtoChunk protoChunk, ServerWorld world, PointOfInterestStorage poiStorage, ChunkPos chunkPos, NbtCompound nbt){
         if (nbt.contains(ProtoSkyMod.GRACES_TAG)){
             NbtCompound graces_compound = nbt.getCompound(ProtoSkyMod.GRACES_TAG);
 
@@ -48,7 +48,7 @@ public abstract class ChunkSerializerMixin {
     }
 
     @ModifyReturnValue(method = "serialize", at=@At("RETURN"))
-    private static NbtCompound save_graces(NbtCompound nbt, ServerWorld world, Chunk chunk){
+    private static NbtCompound serialize_graces(NbtCompound nbt, ServerWorld world, Chunk chunk){
         //save the graces only if we haven't yet fully generated the chunk
         //free storage space
         if (!chunk.getStatus().isAtLeast(ChunkStatus.LIGHT)) {
