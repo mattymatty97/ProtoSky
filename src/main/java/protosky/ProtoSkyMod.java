@@ -3,43 +3,44 @@ package protosky;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import joptsimple.internal.Strings;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
-import net.fabricmc.fabric.api.resource.ResourcePackActivationType;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.resource.Resource;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.resource.ResourceType;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Property;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.apache.commons.lang3.function.TriFunction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Unique;
 import protosky.interfaces.FeatureWorldMask;
 
 import java.io.Reader;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 @SuppressWarnings({"unchecked","rawtypes"})
 public class ProtoSkyMod implements ModInitializer {
 
     private static final Runnable NOOP = () -> {};
 
-    private static final Identifier MOD_IDENTIFIER = new Identifier("protosky");
+    private static final Identifier MOD_IDENTIFIER = new Identifier("protosky", "");
 
     public static final String GRACES_TAG = "protosky_graces";
     public static final String OLD_STATUS_TAG = "protosky_old_status";
@@ -47,6 +48,8 @@ public class ProtoSkyMod implements ModInitializer {
     public static final Logger LOGGER = LogManager.getLogger("ProtoSky");
 
     public static final Map<String, FeatureWorldMask> baked_masks = new LinkedHashMap<>();
+
+    public static ProtoSkySpawn spawnInfo = new ProtoSkySpawn(null, null);
     @Unique
     public static final FeatureWorldMask EMPTY_MASK = new FeatureWorldMask() {
         @Override
@@ -79,22 +82,24 @@ public class ProtoSkyMod implements ModInitializer {
 
     private static class ResourceReloadListener implements SimpleSynchronousResourceReloadListener{
 
-        public static final Identifier IDENTIFIER = MOD_IDENTIFIER.withPath("grace");
+        public static final Identifier GRACE_IDENTIFIER = MOD_IDENTIFIER.withPath("grace");
+        public static final Identifier SPAWN_IDENTIFIER = MOD_IDENTIFIER.withPath("spawn/forced.json");
         @Override
         public Identifier getFabricId() {
-            return IDENTIFIER;
+            return MOD_IDENTIFIER;
         }
 
         @Override
         public void reload(ResourceManager manager) {
             //forget old data
             baked_masks.clear();
+            spawnInfo = new ProtoSkySpawn(null, null);
 
             //get all json files in the grace tree
-            Map<Identifier, Resource> resourceMap = manager.findResources(getFabricId().getPath(), id -> id.getPath().endsWith(".json"));
+            Map<Identifier, Resource> graceResourceMap = manager.findResources(GRACE_IDENTIFIER.getPath(), id -> id.getPath().endsWith(".json"));
 
             //parse each json
-            for (Map.Entry<Identifier, Resource> entry : resourceMap.entrySet()){
+            for (Map.Entry<Identifier, Resource> entry : graceResourceMap.entrySet()){
                 try(Reader reader = entry.getValue().getReader()) {
                     // cast the json to the Config class
                     GraceConfig config = JSON_READER.fromJson(reader, GraceConfig.class);
@@ -105,7 +110,7 @@ public class ProtoSkyMod implements ModInitializer {
                         //generate the name based on the path the file was
                         String currPath = entry.getKey().getPath();
                         //remove the prefix from the path
-                        String main_path = currPath.substring(IDENTIFIER.getPath().length());
+                        String main_path = currPath.substring(GRACE_IDENTIFIER.getPath().length());
                         //remove extra / if present
                         if (main_path.startsWith("/"))
                             main_path = main_path.substring(1);
@@ -183,6 +188,39 @@ public class ProtoSkyMod implements ModInitializer {
 
                         //and add the mask to the map
                         ProtoSkyMod.baked_masks.put(name, mask);
+                    }
+                } catch(Throwable t) {
+                    LOGGER.error("Error occurred while loading resource json " + entry.getKey().toString(), t);
+                }
+            }
+
+            //get the json file in the spawn tree
+            Map<Identifier, Resource> spawnResourceMap = manager.findResources(SPAWN_IDENTIFIER.getPath(), id -> true);
+
+            //parse each json ( should be only one )
+            for (Map.Entry<Identifier, Resource> entry : spawnResourceMap.entrySet()){
+                try(Reader reader = entry.getValue().getReader()) {
+                    // cast the json to the Config class
+                    if (entry.getKey().getPath().equals(SPAWN_IDENTIFIER.getPath())) {
+                        SpawnConfig config = JSON_READER.fromJson(reader, SpawnConfig.class);
+
+                        RegistryKey<World> worldKey = null;
+                        BlockPos spawnPos = null;
+
+                        if (config.worldKey != null){
+                            Identifier worldId = Identifier.tryParse(config.worldKey);
+                            if ( worldId != null) {
+                                worldKey = RegistryKey.of(RegistryKeys.WORLD, worldId);
+                            } else {
+                                LOGGER.warn("Malformed spawn world string: {}", config.worldKey);
+                            }
+                        }
+
+                        if (config.spawnPos != null && config.spawnPos.size() == 3){
+                            spawnPos = new BlockPos(config.spawnPos.getInt(0),config.spawnPos.getInt(1),config.spawnPos.getInt(2));
+                        }
+
+                        spawnInfo = new ProtoSkySpawn(worldKey, spawnPos);
                     }
                 } catch(Throwable t) {
                     LOGGER.error("Error occurred while loading resource json " + entry.getKey().toString(), t);
@@ -402,5 +440,10 @@ public class ProtoSkyMod implements ModInitializer {
             protected Integer max_count;
         }
 
+    }
+
+    public static class SpawnConfig{
+        protected String worldKey;
+        protected IntArrayList spawnPos;
     }
 }

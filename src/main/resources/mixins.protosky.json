@@ -9,6 +9,8 @@
     "accessors.ProtoChunkAccessor",
     "accessors.StateAccessor",
     "accessors.StructurePieceAccessor",
+    "spawn.PlayerManagerMixin",
+    "spawn.ServerPlayerEntityMixin",
     "worldgen.ChunkStatusMixin",
     "worldgen.below_zero.BelowZeroRetrogenMixin",
     "worldgen.below_zero.ChunkHeightAndBiomeFixMixin",
