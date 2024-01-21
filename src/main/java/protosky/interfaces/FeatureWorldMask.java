@@ -5,12 +5,8 @@ import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import protosky.ProtoSkyMod;
 
-import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
-
 public interface FeatureWorldMask {
-    boolean hasGraces(Random random);
-    boolean canPlace(LocalRef<BlockState> blockState, Random random, Map<ProtoSkyMod.GraceConfig.SubConfig,AtomicInteger> map);
-    boolean canSpawn(LocalRef<Entity> entity, Random random, Map<ProtoSkyMod.GraceConfig.SubConfig,AtomicInteger> map);
+    boolean hasGraces(Double value);
+    boolean canPlace(LocalRef<BlockState> blockState, Double value);
+    boolean canSpawn(LocalRef<Entity> entity, Double value);
 }

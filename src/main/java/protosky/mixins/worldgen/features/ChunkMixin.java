@@ -2,6 +2,7 @@ package protosky.mixins.worldgen.features;
 
 import com.google.common.collect.ImmutableSet;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registry;
@@ -26,7 +27,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Mixin(Chunk.class)
-public class ChunkMixin implements GraceHolder {
+public abstract class ChunkMixin implements GraceHolder {
     @Unique
     private Map<BlockPos, BlockState> gracedBlockStates;
 
@@ -36,6 +37,9 @@ public class ChunkMixin implements GraceHolder {
     @Inject(method = "<init>", at = @At("RETURN"))
     private void init(ChunkPos pos, UpgradeData upgradeData, HeightLimitView heightLimitView, Registry biomeRegistry, long inhabitedTime, ChunkSection[] sectionArray, BlendingData blendingData, CallbackInfo ci){
         gracedBlockStates = new ConcurrentHashMap<>();
+
+        //TODO remove debug blocks
+        gracedBlockStates.put(pos.getStartPos(), Blocks.SEA_LANTERN.getDefaultState());
         gracedEntities = Collections.synchronizedSet(new HashSet<>());
     }
 

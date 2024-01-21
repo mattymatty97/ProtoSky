@@ -71,9 +71,9 @@ public abstract class ChunkStatusMixin {
 
                                 WorldGenUtils.deleteBlocks(chunk, world);
                                 WorldGenUtils.clearEntities((ProtoChunk)chunk, world);
-                                WorldGenUtils.resetHeightMaps(chunk);
 
                                 WorldGenUtils.restoreBlocks(chunk, world);
+                                WorldGenUtils.resetHeightMaps(chunk);
                                 WorldGenUtils.restoreEntities((ProtoChunk)chunk, world);
 
                                 //Run the normal INITIALIZE_LIGHT code because we still want that to work. All we want to do is make some code run before it

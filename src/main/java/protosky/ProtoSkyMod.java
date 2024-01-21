@@ -8,7 +8,6 @@ import joptsimple.internal.Strings;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.registry.Registries;
@@ -20,8 +19,8 @@ import net.minecraft.resource.ResourceType;
 import net.minecraft.state.property.Property;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.random.ChunkRandom;
 import net.minecraft.world.World;
-import org.apache.commons.lang3.function.TriFunction;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -30,7 +29,7 @@ import protosky.interfaces.FeatureWorldMask;
 
 import java.io.Reader;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 @SuppressWarnings({"unchecked","rawtypes"})
@@ -48,20 +47,25 @@ public class ProtoSkyMod implements ModInitializer {
     public static final Map<String, FeatureWorldMask> baked_masks = new LinkedHashMap<>();
 
     public static ProtoSkySpawn spawnInfo = new ProtoSkySpawn(null, null);
+
+    public static ThreadLocal<ProtoSkySpawn> forcedSpawn = new ThreadLocal<>();
+
+    public static ThreadLocal<ChunkRandom> graceRandom = new ThreadLocal<>();
+
     @Unique
     public static final FeatureWorldMask EMPTY_MASK = new FeatureWorldMask() {
         @Override
-        public boolean hasGraces(Random random) {
+        public boolean hasGraces(Double value) {
             return false;
         }
 
         @Override
-        public boolean canPlace(LocalRef<BlockState> blockStateRef, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
+        public boolean canPlace(LocalRef<BlockState> blockStateRef, Double value) {
             return false;
         }
 
         @Override
-        public boolean canSpawn(LocalRef<Entity> entityRef, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
+        public boolean canSpawn(LocalRef<Entity> entityRef, Double value) {
             return false;
         }
     };
@@ -132,55 +136,55 @@ public class ProtoSkyMod implements ModInitializer {
                     if (!ProtoSkyMod.baked_masks.containsKey(name)) {
 
                         //bake the probability check
-                        Function<Random, Boolean> mainCheck = getProbabilityCheck(config.probability);
+                        Function<Double, Boolean> mainCheck = getProbabilityCheck(config.probability);
 
                         //if there is an entity section iterate over it
-                        TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> entityCheck;
+                        BiFunction<Double, LocalRef<Entity>, Boolean> entityCheck;
                         if (config.entities != null) {
                             //start with an always false check to fail in case of empty list
-                            TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> tmpEntityCheck = (r, ref, map) -> false;
+                            BiFunction<Double, LocalRef<Entity>, Boolean> tmpEntityCheck = (r, ref) -> false;
                             for (GraceConfig.EntityConfig entityConfig : config.entities) {
-                                TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> oldEntityCheck = tmpEntityCheck;
-                                TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> currEntityCheck = makeEntityCheck(entityConfig);
+                                BiFunction<Double, LocalRef<Entity>, Boolean> oldEntityCheck = tmpEntityCheck;
+                                BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck = makeEntityCheck(entityConfig);
                                 //append the new check in or with the previous ones
-                                tmpEntityCheck = (r, ref, map) -> oldEntityCheck.apply(r, ref, map) || currEntityCheck.apply(r, ref, map);
+                                tmpEntityCheck = (r, ref) -> oldEntityCheck.apply(r, ref) || currEntityCheck.apply(r, ref);
                             }
                             entityCheck = tmpEntityCheck;
                         } else {
-                            entityCheck = (r, ref, map) -> true;
+                            entityCheck = (r, ref) -> true;
                         }
 
                         //if there is a block check
-                        TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> blockCheck;
+                        BiFunction<Double, LocalRef<BlockState>, Boolean> blockCheck;
                         if (config.blocks != null) {
                             //start with an always false check to fail in case of empty list
-                            TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> tmpBlockCheck = (r, ref, map) -> false;
+                            BiFunction<Double, LocalRef<BlockState>, Boolean> tmpBlockCheck = (r, ref) -> false;
                             for (GraceConfig.BlockConfig blockConfig : config.blocks) {
-                                TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> oldBlockCheck = tmpBlockCheck;
-                                TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> currBlockCheck = makeBlockCheck(blockConfig);
+                                BiFunction<Double, LocalRef<BlockState>, Boolean> oldBlockCheck = tmpBlockCheck;
+                                BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck = makeBlockCheck(blockConfig);
                                 //append the new check in or with the previous ones
-                                tmpBlockCheck = (r, ref, map) -> oldBlockCheck.apply(r, ref, map) || currBlockCheck.apply(r, ref, map);
+                                tmpBlockCheck = (r, ref) -> oldBlockCheck.apply(r, ref) || currBlockCheck.apply(r, ref);
                             }
                             blockCheck = tmpBlockCheck;
                         } else {
-                            blockCheck = (r, ref, map) -> true;
+                            blockCheck = (r, ref) -> true;
                         }
 
                         //combine all the backed checks into the Mask Class
                         FeatureWorldMask mask = new FeatureWorldMask() {
                             @Override
-                            public boolean hasGraces(Random random) {
-                                return mainCheck.apply(random);
+                            public boolean hasGraces(Double value) {
+                                return mainCheck.apply(value);
                             }
 
                             @Override
-                            public boolean canPlace(LocalRef<BlockState> blockState, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
-                                return blockCheck.apply(random, blockState, map);
+                            public boolean canPlace(LocalRef<BlockState> blockState, Double value) {
+                                return blockCheck.apply(value, blockState);
                             }
 
                             @Override
-                            public boolean canSpawn(LocalRef<Entity> entity, Random random, Map<GraceConfig.SubConfig,AtomicInteger> map) {
-                                return entityCheck.apply(random, entity, map);
+                            public boolean canSpawn(LocalRef<Entity> entity, Double value) {
+                                return entityCheck.apply(value, entity);
                             }
                         };
 
@@ -232,8 +236,8 @@ public class ProtoSkyMod implements ModInitializer {
          * @return the baked function to be checked against
          */
         @NotNull
-        private static TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> makeEntityCheck(GraceConfig.EntityConfig entityConfig) {
-            TriFunction<Random, LocalRef<Entity>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> currEntityCheck;
+        private static BiFunction<Double, LocalRef<Entity>, Boolean> makeEntityCheck(GraceConfig.EntityConfig entityConfig) {
+            BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck;
 
             //if it has a name check
             Function<String,Boolean> nameCheck;
@@ -245,22 +249,12 @@ public class ProtoSkyMod implements ModInitializer {
             }
 
             //generate the probability check
-            Function<Random, Boolean> probabilityCheck = getProbabilityCheck(entityConfig.probability);
-
-            //if it has a max_count check
-            Function<Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> count_check;
-            if (entityConfig.max_count != null && entityConfig.max_count >= 0){
-                //obtain the counter from the map and increment it
-                count_check = (map) -> map.computeIfAbsent(entityConfig, k -> new AtomicInteger()).getAndIncrement() < entityConfig.max_count;
-            }else{
-                count_check = null;
-            }
+            Function<Double, Boolean> probabilityCheck = getProbabilityCheck(entityConfig.probability);
 
             //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
-            currEntityCheck = (r, ref, map) ->
+            currEntityCheck = (r, ref) ->
                     ( (nameCheck!=null) ? nameCheck.apply(Registries.ENTITY_TYPE.getId(ref.get().getType()).toString()) : true ) &&
-                    ( (probabilityCheck!=null) ? probabilityCheck.apply(r) : true ) &&
-                    ( (count_check!=null) ? count_check.apply(map) : true );
+                    ( (probabilityCheck!=null) ? probabilityCheck.apply(r) : true );
             return currEntityCheck;
         }
 
@@ -271,9 +265,9 @@ public class ProtoSkyMod implements ModInitializer {
          * @return the baked function to be checked against
          */
         @NotNull
-        private static TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig,AtomicInteger>, Boolean> makeBlockCheck(GraceConfig.BlockConfig blockConfig) {
+        private static BiFunction<Double, LocalRef<BlockState>, Boolean> makeBlockCheck(GraceConfig.BlockConfig blockConfig) {
 
-            TriFunction<Random, LocalRef<BlockState>, Map<GraceConfig.SubConfig, AtomicInteger>, Boolean> currBlockCheck;
+            BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck;
 
             //if it has a name check
             Function<String,Boolean> nameCheck;
@@ -286,17 +280,7 @@ public class ProtoSkyMod implements ModInitializer {
 
 
             //generate the probability check
-            Function<Random, Boolean> probabilityCheck = getProbabilityCheck(blockConfig.probability);
-
-
-            //if it has a max_count check
-            Function<Map<GraceConfig.SubConfig, AtomicInteger>, Boolean> count_check;
-            if (blockConfig.max_count != null && blockConfig.max_count >= 0){
-                //obtain the counter from the map and increment it
-                count_check = (map) -> map.computeIfAbsent(blockConfig, b ->new AtomicInteger() ).getAndIncrement() < blockConfig.max_count;
-            }else{
-                count_check = null;
-            }
+            Function<Double, Boolean> probabilityCheck = getProbabilityCheck(blockConfig.probability);
 
             //if there are blockstates to be checked
             Function<BlockState,Boolean> stateCheck;
@@ -348,12 +332,11 @@ public class ProtoSkyMod implements ModInitializer {
             */
 
             //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
-            currBlockCheck = (r, ref, map) -> {
+            currBlockCheck = (r, ref) -> {
                         boolean result =
                         ( (nameCheck!=null) ? nameCheck.apply(Registries.BLOCK.getId(ref.get().getBlock()).toString()) : true ) &&
                         ( (stateCheck!=null) ? stateCheck.apply(ref.get()) : true ) &&
-                        ( (probabilityCheck!=null) ? probabilityCheck.apply(r) : true ) &&
-                        ( (count_check!=null) ? count_check.apply(map) : true );
+                        ( (probabilityCheck!=null) ? probabilityCheck.apply(r) : true );
                         /*if (result && blockStateProcessor != null)
                             blockStateProcessor.accept(ref);*/
                         return result;
@@ -367,13 +350,13 @@ public class ProtoSkyMod implements ModInitializer {
          * @param probability the probability to be checked against. range -> [0.0, 1.0]
          * @return the probability check
          */
-        private static Function<Random, Boolean> getProbabilityCheck(Double probability) {
-            Function<Random, Boolean> probabilityCheck;
+        private static Function<Double, Boolean> getProbabilityCheck(Double probability) {
+            Function<Double, Boolean> probabilityCheck;
             if (probability != null) {
-                if (probability <= 1.0 && probability >= 0.0)
-                    probabilityCheck = random -> random.nextFloat() < probability;
+                if (probability < 1.0 && probability > 0.0)
+                    probabilityCheck = value -> value < probability;
                 else if (probability <= 0.0)
-                    probabilityCheck = random -> false;
+                    probabilityCheck = value -> false;
                 else
                     probabilityCheck = r -> true;
             } else {
@@ -433,9 +416,6 @@ public class ProtoSkyMod implements ModInitializer {
             //the probability of this specific blokc/entity to be placed in the world
             protected Double probability;
 
-            //the maximum amount of blocks/entities matching this rule to be placed in the world
-            //( this count is valid only for a 3x3 chunk area, structures larger than might not conform to this rule )
-            protected Integer max_count;
         }
 
     }

@@ -25,7 +25,7 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-	include( implementation( annotationProcessor( "com.github.LlamaLad7.mixinextras:mixinextras-fabric:${project.mixin_extras_fabric_version}")))
+	implementation( annotationProcessor( "io.github.llamalad7:mixinextras-fabric:${project.mixin_extras_fabric_version}"))
 	// Uncomment the following line to enable the deprecated Fabric API modules.
 	// These are included in the Fabric API production distribution and allow you to update your mod to the latest modules at a later more convenient time.
 
@@ -39,6 +39,8 @@ base {
 def placeholders = [
 		'version': project.version,
 		'mc_version': project.minecraft_version,
+		'loader_version': project.loader_version,
+		'api_version': project.fabric_version,
 		'build': buildnumber
 ]
 

@@ -1,20 +1,26 @@
 package protosky.mixins.spawn;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.injector.ModifyReceiver;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.dimension.DimensionType;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import protosky.ProtoSkyMod;
+import protosky.ProtoSkySpawn;
 
 @Mixin(ServerPlayerEntity.class)
-public class ServerPlayerEntityMixin {
-    @WrapOperation(method = "moveToSpawn", at=@At(value = "INVOKE", target = "Lnet/minecraft/server/world/ServerWorld;getSpawnPos()Lnet/minecraft/util/math/BlockPos;"))
-    BlockPos getWorldSpawn(ServerWorld instance, Operation<BlockPos> original){
-        BlockPos forceSpawn = ProtoSkyMod.spawnInfo.spawnPos();
-        return forceSpawn != null ? forceSpawn : original.call(instance);
+public abstract class ServerPlayerEntityMixin {
+    @Shadow @Final public MinecraftServer server;
+
+    @ModifyReceiver(method = "moveToSpawn", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/dimension/DimensionType;hasSkyLight()Z"))
+    private DimensionType fakeDimension(DimensionType instance){
+        ProtoSkySpawn forcedSpawn = ProtoSkyMod.forcedSpawn.get();
+        if (forcedSpawn != null && forcedSpawn.spawnWorld() != null)
+            return this.server.getOverworld().getDimension();
+        return instance;
     }
 
 }
