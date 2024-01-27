@@ -8,8 +8,8 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import protosky.ProtoSkyMod;
 import protosky.ProtoSkySpawn;
+import protosky.ThreadLocals;
 
 @Mixin(ServerPlayerEntity.class)
 public abstract class ServerPlayerEntityMixin {
@@ -17,7 +17,7 @@ public abstract class ServerPlayerEntityMixin {
 
     @ModifyReceiver(method = "moveToSpawn", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/dimension/DimensionType;hasSkyLight()Z"))
     private DimensionType fakeDimension(DimensionType instance){
-        ProtoSkySpawn forcedSpawn = ProtoSkyMod.forcedSpawn.get();
+        ProtoSkySpawn forcedSpawn = ThreadLocals.forcedSpawn.get();
         if (forcedSpawn != null && forcedSpawn.spawnWorld() != null)
             return this.server.getOverworld().getDimension();
         return instance;

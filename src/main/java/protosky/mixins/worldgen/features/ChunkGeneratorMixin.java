@@ -5,15 +5,10 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Share;
 import com.llamalad7.mixinextras.sugar.ref.LocalBooleanRef;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.structure.StructureSet;
 import net.minecraft.structure.StructureStart;
-import net.minecraft.structure.StructureTemplateManager;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.ChunkSectionPos;
-import net.minecraft.util.math.random.CheckedRandom;
 import net.minecraft.util.math.random.ChunkRandom;
 import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
 import net.minecraft.world.ChunkRegion;
@@ -21,18 +16,22 @@ import net.minecraft.world.StructureWorldAccess;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.StructureAccessor;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
-import net.minecraft.world.gen.noise.NoiseConfig;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import protosky.ProtoSkyMod;
+import protosky.ThreadLocals;
 import protosky.interfaces.GenerationMaskHolder;
 import protosky.mixins.accessors.ChunkRegionAccessor;
 
 @Mixin(ChunkGenerator.class)
 public abstract class ChunkGeneratorMixin {
+
+    @Inject(method = "generateFeatures", at = @At("HEAD"))
+    public void setThreadLocals(StructureWorldAccess world, Chunk chunk, StructureAccessor structureAccessor, CallbackInfo ci){
+        ThreadLocals.currentRegion.set((ChunkRegion)world);
+    }
+
 
     @WrapOperation(method = "generateFeatures", at = @At(value = "NEW", target = "(J)Lnet/minecraft/util/math/random/Xoroshiro128PlusPlusRandom;"))
     public Xoroshiro128PlusPlusRandom initGraceRandom(long seed, Operation<Xoroshiro128PlusPlusRandom> original,
@@ -52,26 +51,33 @@ public abstract class ChunkGeneratorMixin {
 
     @Inject(method = "method_38265", at = @At(value = "HEAD"))
     public void updateStructureMask(StructureWorldAccess structureWorldAccess, StructureAccessor structureAccessor, ChunkRandom chunkRandom, Chunk chunk, ChunkPos chunkPos, StructureStart start, CallbackInfo ci,
-                                    @Share("shouldReset") LocalBooleanRef reset
+                                    @Share("shouldReset") LocalBooleanRef reset,
+                                    @Share("origin") LocalRef<BlockPos> origin
     ){
         if (structureWorldAccess instanceof GenerationMaskHolder holder && holder.protoSky$getMask() == null){
             BlockBox bbox = start.getChildren().get(0).getBoundingBox();
             BlockPos blockPos = bbox.getCenter();
             ChunkRegion region = (ChunkRegion) structureWorldAccess;
             String structureName = ((ChunkRegionAccessor)region).getCurrentlyGeneratingStructureName().get();
-            holder.protoSky$updateMask(structureName, blockPos);
+            holder.protoSky$updateMask(new String[]{structureName}, blockPos);
             reset.set(true);
+            origin.set(blockPos);
         }
     }
 
     @Inject(method = "method_38265", at = @At(value = "RETURN"))
     public void clearStructureMask(StructureWorldAccess structureWorldAccess, StructureAccessor structureAccessor, ChunkRandom chunkRandom, Chunk chunk, ChunkPos chunkPos, StructureStart start, CallbackInfo ci,
-                                   @Share("shouldReset")LocalBooleanRef reset
+                                   @Share("shouldReset")LocalBooleanRef reset,
+                                   @Share("origin") LocalRef<BlockPos> origin
     ){
-        if (structureWorldAccess instanceof GenerationMaskHolder holder && reset.get()){
+        if (structureWorldAccess instanceof GenerationMaskHolder holder){
             ChunkRegion region = (ChunkRegion) structureWorldAccess;
             String structureName = ((ChunkRegionAccessor)region).getCurrentlyGeneratingStructureName().get();
-            holder.protoSky$updateMask(structureName, null);
+
+            holder.protoSky$logMask(new String[]{structureName}, origin.get(), true);
+
+            if (reset.get())
+                holder.protoSky$updateMask(new String[]{structureName}, null);
         }
     }
 
@@ -82,12 +88,13 @@ public abstract class ChunkGeneratorMixin {
     ){
         original.call(graceRandom.get(),populationSeed,index, step);
         original.call(instance,populationSeed,index, step);
-        ProtoSkyMod.graceRandom.set(graceRandom.get());
+        ThreadLocals.graceRandom.set(graceRandom.get());
     }
 
     @Inject(method = "generateFeatures", at =@At("RETURN"))
     public void unsetGraceRandoms(StructureWorldAccess world, Chunk chunk, StructureAccessor structureAccessor, CallbackInfo ci){
-        ProtoSkyMod.graceRandom.remove();
+        ThreadLocals.graceRandom.remove();
+        ThreadLocals.currentRegion.remove();
         if (world instanceof GenerationMaskHolder holder){
             holder.protoSky$updateMask(null,null);
         }

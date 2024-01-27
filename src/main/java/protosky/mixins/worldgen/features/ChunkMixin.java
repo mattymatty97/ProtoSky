@@ -35,11 +35,8 @@ public abstract class ChunkMixin implements GraceHolder {
     private Set<NbtCompound> gracedEntities ;
 
     @Inject(method = "<init>", at = @At("RETURN"))
-    private void init(ChunkPos pos, UpgradeData upgradeData, HeightLimitView heightLimitView, Registry biomeRegistry, long inhabitedTime, ChunkSection[] sectionArray, BlendingData blendingData, CallbackInfo ci){
+    private void init(ChunkPos pos, UpgradeData upgradeData, HeightLimitView heightLimitView, Registry<?> biomeRegistry, long inhabitedTime, ChunkSection[] sectionArray, BlendingData blendingData, CallbackInfo ci){
         gracedBlockStates = new ConcurrentHashMap<>();
-
-        //TODO remove debug blocks
-        gracedBlockStates.put(pos.getStartPos(), Blocks.SEA_LANTERN.getDefaultState());
         gracedEntities = Collections.synchronizedSet(new HashSet<>());
     }
 

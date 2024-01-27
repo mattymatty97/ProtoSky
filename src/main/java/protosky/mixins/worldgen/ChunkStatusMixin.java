@@ -12,10 +12,13 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.ChunkStatus;
 import net.minecraft.world.chunk.ProtoChunk;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import protosky.ProtoSkyMod;
 import protosky.WorldGenUtils;
 
 import java.util.EnumSet;
@@ -26,7 +29,6 @@ import java.util.function.Function;
 
 @Mixin(ChunkStatus.class)
 public abstract class ChunkStatusMixin {
-
     //This injects into the function that would normally register the statues to registry and changes some of the vanilla values
     // I do it this way because I couldn't figure out how to change static fields. I know about <clinit>, but the statuses have
     // to be initialized after any previous stage and before any stages that declare it as previous. This was easier.
@@ -42,18 +44,13 @@ public abstract class ChunkStatusMixin {
                                  ChunkStatus.LoadTask loadTask,
                                  CallbackInfoReturnable<ChunkStatus> cir
     ) {
-        //Task margin will request that amount of chunks around the one we are generating to at least be started. If they aren't the game will crash
-
-        //This modifies the initialize_light status to have a different task margin and run some code before the normal code
-        // that should be in its own stage, but I couldn't create one, so I use this one.
         if (id.equals("initialize_light")) {
             cir.setReturnValue(Registry.register(
                     Registries.CHUNK_STATUS,
                     id,
                     new ChunkStatus(
-                            //AFTER_FEATURES,
                             previous,
-                            8,
+                            taskMargin,
                             shouldAlwaysUpgrade,
                             heightMapTypes,
                             chunkType,
@@ -69,12 +66,15 @@ public abstract class ChunkStatusMixin {
                                     Chunk chunk
                             ) -> {
 
-                                WorldGenUtils.deleteBlocks(chunk, world);
-                                WorldGenUtils.clearEntities((ProtoChunk)chunk, world);
+                                //if the world is in the ignored list do nothing and let vanilla code run
+                                if (!ProtoSkyMod.ignoredWorlds.contains(world.getRegistryKey())) {
+                                    WorldGenUtils.deleteBlocks(chunk, world);
+                                    WorldGenUtils.clearEntities((ProtoChunk) chunk, world);
 
-                                WorldGenUtils.restoreBlocks(chunk, world);
-                                WorldGenUtils.resetHeightMaps(chunk);
-                                WorldGenUtils.restoreEntities((ProtoChunk)chunk, world);
+                                    WorldGenUtils.restoreBlocks(chunk, world);
+                                    WorldGenUtils.resetHeightMaps(chunk);
+                                    WorldGenUtils.restoreEntities((ProtoChunk) chunk, world);
+                                }
 
                                 //Run the normal INITIALIZE_LIGHT code because we still want that to work. All we want to do is make some code run before it
                                 return generationTask.doWork(targetStatus, executor, world, generator, structureTemplateManager, lightingProvider, fullChunkConverter, chunks, chunk);
@@ -93,13 +93,26 @@ public abstract class ChunkStatusMixin {
                             shouldAlwaysUpgrade,
                             heightMapTypes,
                             chunkType,
-                            (ChunkStatus.SimpleGenerationTask) (
+                            (
                                     ChunkStatus targetStatus,
+                                    Executor executor,
                                     ServerWorld world,
                                     ChunkGenerator generator,
+                                    StructureTemplateManager structureTemplateManager,
+                                    ServerLightingProvider lightingProvider,
+                                    Function<Chunk, CompletableFuture<Either<Chunk, ChunkHolder.Unloaded>>> fullChunkConverter,
                                     List<Chunk> chunks,
                                     Chunk chunk
                             ) -> {
+
+                                if (ProtoSkyMod.ignoredWorlds.contains(world.getRegistryKey())) {
+                                    //if world is in the ignored list Run the normal code
+                                    return generationTask.doWork(targetStatus, executor, world, generator, structureTemplateManager, lightingProvider, fullChunkConverter, chunks, chunk);
+                                }else {
+                                    //otherwise skip the spawn step ( output the chunk as is )
+                                    return CompletableFuture.completedFuture(Either.left(chunk));
+                                }
+
                             },
                             loadTask
                     )

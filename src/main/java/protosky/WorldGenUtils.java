@@ -116,6 +116,10 @@ public class WorldGenUtils
 
         Map<BlockPos, BlockState> gracedBlocks = ((GraceHolder)chunk).protoSky$getGracedBlocks();
 
+        if (Debug.chunkOriginBlock != null){
+            gracedBlocks.put(chunk.getPos().getStartPos(), Debug.chunkOriginBlock.getDefaultState());
+        }
+
         gracedBlocks.forEach((blockPos, blockState) -> {
             if (!had_retrogen || !BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(blockPos)){
                 chunk.setBlockState(blockPos,blockState,false);

@@ -3,7 +3,6 @@
   "package": "protosky.mixins",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "EnderDragonFightMixin",
     "accessors.ChunkRegionAccessor",
     "accessors.ChunkStatusInvoker",
     "accessors.PlacedFeatureAccessor",
@@ -13,7 +12,10 @@
     "spawn.PlayerManagerMixin",
     "spawn.ServerPlayerEntityMixin",
     "spawn.WorldMixin",
+    "utils.ChunkMixin",
+    "utils.ChunkSectionMixin",
     "worldgen.ChunkStatusMixin",
+    "worldgen.EnderDragonFightMixin",
     "worldgen.below_zero.BelowZeroRetrogenMixin",
     "worldgen.below_zero.ChunkHeightAndBiomeFixMixin",
     "worldgen.below_zero.ChunkMixin",
@@ -22,6 +24,7 @@
     "worldgen.features.ChunkGeneratorMixin",
     "worldgen.features.ChunkMixin",
     "worldgen.features.ChunkRegionMixin",
+    "worldgen.features.ChunkSectionMixin",
     "worldgen.features.ChunkSerializerMixin",
     "worldgen.features.PlacedFeatureMixin",
     "worldgen.features.WrappedProtoChunkMixin"

@@ -8,8 +8,10 @@ import joptsimple.internal.Strings;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
@@ -19,7 +21,6 @@ import net.minecraft.resource.ResourceType;
 import net.minecraft.state.property.Property;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.random.ChunkRandom;
 import net.minecraft.world.World;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,13 +48,11 @@ public class ProtoSkyMod implements ModInitializer {
     public static final Map<String, FeatureWorldMask> baked_masks = new LinkedHashMap<>();
 
     public static ProtoSkySpawn spawnInfo = new ProtoSkySpawn(null, null);
-
-    public static ThreadLocal<ProtoSkySpawn> forcedSpawn = new ThreadLocal<>();
-
-    public static ThreadLocal<ChunkRandom> graceRandom = new ThreadLocal<>();
+    public static Set<RegistryKey<World>> ignoredWorlds = new HashSet<>();
 
     @Unique
     public static final FeatureWorldMask EMPTY_MASK = new FeatureWorldMask() {
+
         @Override
         public boolean hasGraces(Double value) {
             return false;
@@ -79,13 +78,14 @@ public class ProtoSkyMod implements ModInitializer {
         ResourceManagerHelper.get(ResourceType.SERVER_DATA).registerReloadListener(new ResourceReloadListener());
     }
 
-
     public static final Gson JSON_READER = new GsonBuilder().setLenient().disableHtmlEscaping().create();
 
     private static class ResourceReloadListener implements SimpleSynchronousResourceReloadListener{
 
         public static final Identifier GRACE_IDENTIFIER = MOD_IDENTIFIER.withPath("grace");
         public static final Identifier SPAWN_IDENTIFIER = MOD_IDENTIFIER.withPath("spawn/forced.json");
+        public static final Identifier DEBUG_IDENTIFIER = MOD_IDENTIFIER.withPath("debug.json");
+        public static final Identifier IGNORED_WORLDS_IDENTIFIER = MOD_IDENTIFIER.withPath("world/ignored.json");
         @Override
         public Identifier getFabricId() {
             return MOD_IDENTIFIER;
@@ -96,6 +96,11 @@ public class ProtoSkyMod implements ModInitializer {
             //forget old data
             baked_masks.clear();
             spawnInfo = new ProtoSkySpawn(null, null);
+            ignoredWorlds.clear();
+
+            Debug.chunkOriginBlock = null;
+            Debug.attemptMap.clear();
+            Debug.anyAttempt = false;
 
             //get all json files in the grace tree
             Map<Identifier, Resource> graceResourceMap = manager.findResources(GRACE_IDENTIFIER.getPath(), id -> id.getPath().endsWith(".json"));
@@ -145,7 +150,7 @@ public class ProtoSkyMod implements ModInitializer {
                             BiFunction<Double, LocalRef<Entity>, Boolean> tmpEntityCheck = (r, ref) -> false;
                             for (GraceConfig.EntityConfig entityConfig : config.entities) {
                                 BiFunction<Double, LocalRef<Entity>, Boolean> oldEntityCheck = tmpEntityCheck;
-                                BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck = makeEntityCheck(entityConfig);
+                                BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck = makeEntityCheck(name, entityConfig);
                                 //append the new check in or with the previous ones
                                 tmpEntityCheck = (r, ref) -> oldEntityCheck.apply(r, ref) || currEntityCheck.apply(r, ref);
                             }
@@ -161,7 +166,7 @@ public class ProtoSkyMod implements ModInitializer {
                             BiFunction<Double, LocalRef<BlockState>, Boolean> tmpBlockCheck = (r, ref) -> false;
                             for (GraceConfig.BlockConfig blockConfig : config.blocks) {
                                 BiFunction<Double, LocalRef<BlockState>, Boolean> oldBlockCheck = tmpBlockCheck;
-                                BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck = makeBlockCheck(blockConfig);
+                                BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck = makeBlockCheck(name, blockConfig);
                                 //append the new check in or with the previous ones
                                 tmpBlockCheck = (r, ref) -> oldBlockCheck.apply(r, ref) || currBlockCheck.apply(r, ref);
                             }
@@ -225,7 +230,58 @@ public class ProtoSkyMod implements ModInitializer {
                         spawnInfo = new ProtoSkySpawn(worldKey, spawnPos);
                     }
                 } catch(Throwable t) {
-                    LOGGER.error("Error occurred while loading resource json " + entry.getKey().toString(), t);
+                    LOGGER.error("Error occurred while loading spawn resource json " + entry.getKey().toString(), t);
+                }
+            }
+
+            //get the json file in the world tree
+            Map<Identifier, Resource> worldResourceMap = manager.findResources(IGNORED_WORLDS_IDENTIFIER.getPath(), id -> true);
+
+            //parse each json ( should be only one )
+            for (Map.Entry<Identifier, Resource> entry : worldResourceMap.entrySet()){
+                try(Reader reader = entry.getValue().getReader()) {
+                    // cast the json to the Config class
+                    if (entry.getKey().getPath().equals(IGNORED_WORLDS_IDENTIFIER.getPath())) {
+                        String[] config = JSON_READER.fromJson(reader, String[].class);
+
+                        for(String worldkey : config){
+                            ignoredWorlds.add(RegistryKey.of(RegistryKeys.WORLD, Identifier.tryParse(worldkey)));
+                        }
+                    }
+                } catch(Throwable t) {
+                    LOGGER.error("Error occurred while loading debug resource json " + entry.getKey().toString(), t);
+                }
+            }
+
+            //get the json file in the debug tree
+            Map<Identifier, Resource> debugResourceMap = manager.findResources(DEBUG_IDENTIFIER.getPath(), id -> true);
+
+            //parse each json ( should be only one )
+            for (Map.Entry<Identifier, Resource> entry : debugResourceMap.entrySet()){
+                try(Reader reader = entry.getValue().getReader()) {
+                    // cast the json to the Config class
+                    if (entry.getKey().getPath().equals(DEBUG_IDENTIFIER.getPath())) {
+                        DebugConfig config = JSON_READER.fromJson(reader, DebugConfig.class);
+
+                        if (config.chunkOriginBlock != null){
+                            Identifier id = Identifier.tryParse(config.chunkOriginBlock);
+                            if (Registries.BLOCK.containsId(id))
+                                Debug.chunkOriginBlock = Registries.BLOCK.get(id);
+                            else
+                                LOGGER.warn("Block {} for chunkOriginBlock is invalid", config.chunkOriginBlock);
+                        }
+
+                        if (config.loggingFeatures != null){
+                            for (String feature : config.loggingFeatures){
+                                Debug.attemptMap.put(feature, new Debug.AttemptCounter());
+                                if (feature.equals("*"))
+                                    Debug.anyAttempt = true;
+                            }
+                        }
+
+                    }
+                } catch(Throwable t) {
+                    LOGGER.error("Error occurred while loading debug resource json " + entry.getKey().toString(), t);
                 }
             }
         }
@@ -236,26 +292,35 @@ public class ProtoSkyMod implements ModInitializer {
          * @return the baked function to be checked against
          */
         @NotNull
-        private static BiFunction<Double, LocalRef<Entity>, Boolean> makeEntityCheck(GraceConfig.EntityConfig entityConfig) {
-            BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck;
+        private static BiFunction<Double, LocalRef<Entity>, Boolean> makeEntityCheck(String graceName, GraceConfig.EntityConfig entityConfig) {
+            try {
+                BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck;
 
-            //if it has a name check
-            Function<String,Boolean> nameCheck;
-            if (entityConfig.entity != null)
-                //check if the entity id matches the one in the config
-                nameCheck = name -> name.equals(entityConfig.entity);
-            else {
-                nameCheck = null;
+                //if it has a name check
+                Function<EntityType<?>, Boolean> nameCheck;
+                if (entityConfig.entity != null) {
+                    Identifier id = Identifier.tryParse(entityConfig.entity);
+                    if (!Registries.ENTITY_TYPE.containsId(id))
+                        throw new RuntimeException("Entity not found");
+                    EntityType<?> type = Registries.ENTITY_TYPE.get(id);
+                    //check if the entity id matches the one in the config
+                    nameCheck = type1 -> type1.equals(type);
+                } else {
+                    nameCheck = null;
+                }
+
+                //generate the probability check
+                Function<Double, Boolean> probabilityCheck = getProbabilityCheck(entityConfig.probability);
+
+                //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
+                currEntityCheck = (r, ref) ->
+                                ((nameCheck != null) ? nameCheck.apply(ref.get().getType()) : true) &&
+                                ((probabilityCheck != null) ? probabilityCheck.apply(r) : true);
+                return currEntityCheck;
+            }catch (Throwable ex){
+                ProtoSkyMod.LOGGER.error("Error while baking entity check for {} of id {}", graceName, entityConfig.entity, ex);
             }
-
-            //generate the probability check
-            Function<Double, Boolean> probabilityCheck = getProbabilityCheck(entityConfig.probability);
-
-            //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
-            currEntityCheck = (r, ref) ->
-                    ( (nameCheck!=null) ? nameCheck.apply(Registries.ENTITY_TYPE.getId(ref.get().getType()).toString()) : true ) &&
-                    ( (probabilityCheck!=null) ? probabilityCheck.apply(r) : true );
-            return currEntityCheck;
+            return (a,b) -> false;
         }
 
 
@@ -265,44 +330,49 @@ public class ProtoSkyMod implements ModInitializer {
          * @return the baked function to be checked against
          */
         @NotNull
-        private static BiFunction<Double, LocalRef<BlockState>, Boolean> makeBlockCheck(GraceConfig.BlockConfig blockConfig) {
+        private static BiFunction<Double, LocalRef<BlockState>, Boolean> makeBlockCheck(String graceName, GraceConfig.BlockConfig blockConfig) {
 
-            BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck;
+            try {
+                BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck;
 
-            //if it has a name check
-            Function<String,Boolean> nameCheck;
-            if (blockConfig.block != null)
-                //check if the block id matches the one in the config
-                nameCheck = name -> name.equals(blockConfig.block);
-            else {
-                nameCheck = null;
-            }
-
-
-            //generate the probability check
-            Function<Double, Boolean> probabilityCheck = getProbabilityCheck(blockConfig.probability);
-
-            //if there are blockstates to be checked
-            Function<BlockState,Boolean> stateCheck;
-            if (blockConfig.states != null){
-                //start with true if no blockstates have to be checked
-                Function<BlockState,Boolean> tmpStateCheck = s -> true;
-                //for each blockstate
-                for (GraceConfig.BlockConfig.StateConfig stateConfig : blockConfig.states){
-                    Function<BlockState,Boolean> currStateCheck = tmpStateCheck;
-                    //check if the blockstate beeing placed has the same value as the Config
-                    Function<BlockState,Boolean> localStateCheck = blockState -> {
-                        Collection<Property<?>> properties = blockState.getProperties();
-                        Optional<Property<?>> optionalProperty = properties.stream().filter(p -> p.getName().equals(stateConfig.key)).findAny();
-                        return optionalProperty.filter(property -> blockState.get(property).equals(stateConfig.value)).isPresent();
-                    };
-                    //combine the checks in AND with each other
-                    tmpStateCheck = blockState -> currStateCheck.apply(blockState) && localStateCheck.apply(blockState);
+                //if it has a name check
+                Function<Block, Boolean> nameCheck;
+                if (blockConfig.block != null) {
+                    Identifier id = Identifier.tryParse(blockConfig.block);
+                    if (!Registries.BLOCK.containsId(id))
+                        throw new RuntimeException("Block not found");
+                    Block block = Registries.BLOCK.get(id);
+                    //check if the block id matches the one in the config
+                    nameCheck = block1 -> block1.equals(block);
+                }else {
+                    nameCheck = null;
                 }
-                stateCheck = tmpStateCheck;
-            }else{
-                stateCheck = null;
-            }
+
+
+                //generate the probability check
+                Function<Double, Boolean> probabilityCheck = getProbabilityCheck(blockConfig.probability);
+
+                //if there are blockstates to be checked
+                Function<BlockState, Boolean> stateCheck;
+                if (blockConfig.states != null) {
+                    //start with true if no blockstates have to be checked
+                    Function<BlockState, Boolean> tmpStateCheck = s -> true;
+                    //for each blockstate
+                    for (GraceConfig.BlockConfig.StateConfig stateConfig : blockConfig.states) {
+                        Function<BlockState, Boolean> currStateCheck = tmpStateCheck;
+                        //check if the blockstate beeing placed has the same value as the Config
+                        Function<BlockState, Boolean> localStateCheck = blockState -> {
+                            Collection<Property<?>> properties = blockState.getProperties();
+                            Optional<Property<?>> optionalProperty = properties.stream().filter(p -> p.getName().equals(stateConfig.key)).findAny();
+                            return optionalProperty.filter(property -> blockState.get(property).equals(stateConfig.value)).isPresent();
+                        };
+                        //combine the checks in AND with each other
+                        tmpStateCheck = blockState -> currStateCheck.apply(blockState) && localStateCheck.apply(blockState);
+                    }
+                    stateCheck = tmpStateCheck;
+                } else {
+                    stateCheck = null;
+                }
 
             /* //the code for forcing a blockstate is commented because I was not able to make the castings work as intended
             Consumer<LocalRef<BlockState>> blockStateProcessor;
@@ -331,17 +401,21 @@ public class ProtoSkyMod implements ModInitializer {
             }
             */
 
-            //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
-            currBlockCheck = (r, ref) -> {
-                        boolean result =
-                        ( (nameCheck!=null) ? nameCheck.apply(Registries.BLOCK.getId(ref.get().getBlock()).toString()) : true ) &&
-                        ( (stateCheck!=null) ? stateCheck.apply(ref.get()) : true ) &&
-                        ( (probabilityCheck!=null) ? probabilityCheck.apply(r) : true );
+                //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
+                currBlockCheck = (r, ref) -> {
+                    boolean result =
+                                    ((nameCheck != null) ? nameCheck.apply(ref.get().getBlock()) : true) &&
+                                    ((stateCheck != null) ? stateCheck.apply(ref.get()) : true) &&
+                                    ((probabilityCheck != null) ? probabilityCheck.apply(r) : true);
                         /*if (result && blockStateProcessor != null)
                             blockStateProcessor.accept(ref);*/
-                        return result;
-            };
-            return currBlockCheck;
+                    return result;
+                };
+                return currBlockCheck;
+            }catch (Throwable ex){
+                ProtoSkyMod.LOGGER.error("Error while baking block check for {} of id {}", graceName, blockConfig.block, ex);
+            }
+            return (a,b) -> false;
         }
 
 
@@ -423,5 +497,10 @@ public class ProtoSkyMod implements ModInitializer {
     public static class SpawnConfig{
         protected String worldKey;
         protected IntArrayList spawnPos;
+    }
+
+    public static class DebugConfig{
+        protected String chunkOriginBlock;
+        protected List<String> loggingFeatures;
     }
 }

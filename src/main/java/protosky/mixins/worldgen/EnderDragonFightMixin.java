@@ -1,4 +1,4 @@
-package protosky.mixins;
+package protosky.mixins.worldgen;
 
 import net.minecraft.entity.boss.dragon.EnderDragonFight;
 import net.minecraft.util.math.BlockPos;
