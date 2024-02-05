@@ -160,7 +160,8 @@ public abstract class ChunkRegionMixin implements GenerationMaskHolder {
             this.maskOrigins.clear();
             ChunkPos chunkPos = this.getCenterPos();
             for (BlockPos blockPos : blocks_to_rollback) {
-                this.setBlockState(blockPos, Blocks.AIR.getDefaultState(), 0, 0);
+                if (!chunkPos.equals(new ChunkPos(blockPos)))
+                    this.setBlockState(blockPos, Blocks.AIR.getDefaultState(), 0, 0);
             }
             blocks_to_rollback.clear();
         }
@@ -185,7 +186,7 @@ public abstract class ChunkRegionMixin implements GenerationMaskHolder {
                 Debug.AttemptCounter counter = null;
                 RegistryKey<?> logKey = null;
                 int index = -1;
-                List<RegistryKey<?>> fullReference = this.maskReferences.stream().flatMap(Arrays::stream).toList();
+
                 if (Debug.anyAttempt) {
                     assert this.maskReferences.peekFirst() != null;
                     logKey = this.maskReferences.peekFirst()[0];
@@ -208,8 +209,8 @@ public abstract class ChunkRegionMixin implements GenerationMaskHolder {
                 }
 
                 if (counter != null) {
-                    String referenceString = fullReference.stream()
-                            .map(RegistryKey::toString)
+                    String referenceString = this.maskReferences.stream()
+                            .map(Arrays::toString)
                             .collect(Collectors.joining(" -> ", "\"", "\""));
                     boolean isSubset = this.maskReferences.size() > 1;
                     boolean wasGraced = ( ( mask != ProtoSkyMod.EMPTY_MASK ) && ( mask != ProtoSkyMod.DEFAULT_MASK ) );
@@ -225,13 +226,16 @@ public abstract class ChunkRegionMixin implements GenerationMaskHolder {
                     if (wasGraced && wasGenerated)
                         counter.generated().add(logOrigin);
 
+                    BlockPos origin = this.maskOrigins.peekLast();
+                    assert origin != null;
+
                     ChunkPos center = this.getCenterPos();
                     if (!isSubset) {
                         ProtoSkyMod.LOGGER.warn(
                                 "ChunkRegion ({} {}) attempted to generate {} at [{} {} {}]| wasGenerated={}, wasGraced={}| total={}, graced={}, vanilla={}, generated={}",
                                 center.x, center.z,
                                 referenceString,
-                                logOrigin.getX(), logOrigin.getY(), logOrigin.getZ(),
+                                origin.getX(), origin.getY(), origin.getZ(),
                                 wasGenerated,
                                 wasGraced,
                                 counter.total().size(),
@@ -240,14 +244,14 @@ public abstract class ChunkRegionMixin implements GenerationMaskHolder {
                                 counter.generated().size()
                         );
                     } else {
-                        BlockPos subOrigin = this.maskOrigins.peekLast();
-                        assert subOrigin != null;
+                        BlockPos parentOrigin = this.maskOrigins.peekFirst();
+                        assert parentOrigin != null;
                         ProtoSkyMod.LOGGER.warn(
                                 "ChunkRegion ({} {}) attempted to generate {} at [{} {} {}] with parent at [{} {} {}]| wasGenerated={}, wasGraced={}| total={}, graced={}, vanilla={}, generated={}",
                                 center.x, center.z,
                                 referenceString,
-                                subOrigin.getX(), subOrigin.getY(), subOrigin.getZ(),
-                                logOrigin.getX(), logOrigin.getY(), logOrigin.getZ(),
+                                origin.getX(), origin.getY(), origin.getZ(),
+                                parentOrigin.getX(), parentOrigin.getY(), parentOrigin.getZ(),
                                 wasGenerated,
                                 wasGraced,
                                 counter.total().size(),
