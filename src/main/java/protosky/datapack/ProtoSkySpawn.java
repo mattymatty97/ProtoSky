@@ -1,4 +1,4 @@
-package protosky;
+package protosky.datapack;
 
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
