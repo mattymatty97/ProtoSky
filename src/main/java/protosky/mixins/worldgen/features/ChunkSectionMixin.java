@@ -32,7 +32,7 @@ public class ChunkSectionMixin {
             FeatureWorldMask mask = holder.protoSky$getMask();
             if (mask != null) {
                 Chunk chunk = ((SectionOfChunk)this).protoSky$getChunk();
-                int y_offset = ((SectionOfChunk)this).protoSky$getYOffset(()->chunk.getHeightLimitView().sectionIndexToCoord(((SectionOfChunk)this).protoSky$getSectionIndex()) * 16);
+                int y_offset = ((SectionOfChunk)this).protoSky$getYOffset();
                 BlockPos pos = chunk.getPos().getBlockPos(x, y + y_offset, z);
                 Random random = ThreadLocals.graceRandom.get();
                 if (random == null) {

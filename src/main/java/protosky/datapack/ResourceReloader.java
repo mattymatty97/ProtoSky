@@ -1,6 +1,8 @@
 package protosky.datapack;
 
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
+import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
+import it.unimi.dsi.fastutil.objects.Reference2ObjectArrayMap;
 import joptsimple.internal.Strings;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.minecraft.block.Block;
@@ -49,37 +51,32 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
      * @param entityConfig the config for the current check
      * @return the baked function to be checked against
      */
-    @NotNull
-    private static BiFunction<Double, LocalRef<Entity>, Boolean> makeEntityCheck(String graceName, GraceConfig.EntityConfig entityConfig) {
+    private static Pair<EntityType<?>, BiFunction<Double, LocalRef<Entity>, Boolean>> makeEntityCheck(String graceName, GraceConfig.EntityConfig entityConfig) {
         try {
             BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck;
+            EntityType<?> type;
 
-            //if it has a name check
-            Function<EntityType<?>, Boolean> nameCheck;
             if (entityConfig.entity != null) {
                 Identifier id = Identifier.tryParse(entityConfig.entity);
                 if (!Registries.ENTITY_TYPE.containsId(id))
                     throw new DataPackException("Entity %s does not exist".formatted(entityConfig.entity));
-                EntityType<?> type = Registries.ENTITY_TYPE.get(id);
-                //check if the entity id matches the one in the config
-                nameCheck = type1 -> type1.equals(type);
+                type = Registries.ENTITY_TYPE.get(id);
             } else {
-                nameCheck = null;
+                throw new DataPackException("Entity name is required");
             }
 
             //generate the probability check
             Function<Double, Boolean> probabilityCheck = ResourceReloader.getProbabilityCheck(entityConfig.probability);
 
             //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
-            currEntityCheck = (r, ref) -> (nameCheck != null ? nameCheck.apply(ref.get().getType()) : true)
-                    && probabilityCheck.apply(r);
-            return currEntityCheck;
+            currEntityCheck = (r, ref) -> probabilityCheck.apply(r);
+            return new Pair<>(type, currEntityCheck);
         } catch (DataPackException ex) {
             ProtoSkyMod.LOGGER.error("Error while baking entity check for {}: {}", graceName, ex.getMessage());
         } catch (Throwable ex) {
             ProtoSkyMod.LOGGER.error("Error while baking entity check for {}", graceName, ex);
         }
-        return (a, b) -> false;
+        return null;
     }
 
     /**
@@ -88,27 +85,21 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
      * @param blockConfig the config for the current check
      * @return the baked function to be checked against
      */
-    @NotNull
-    private static BiFunction<Double, LocalRef<BlockState>, Boolean> makeBlockCheck(String graceName, GraceConfig.BlockConfig blockConfig) {
+    private static Pair<Block, BiFunction<Double, LocalRef<BlockState>, Boolean>> makeBlockCheck(String graceName, GraceConfig.BlockConfig blockConfig) {
 
         try {
             Block block;
             BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck;
 
             //if it has a name check
-            Function<Block, Boolean> nameCheck;
             if (blockConfig.block != null) {
                 Identifier id = Identifier.tryParse(blockConfig.block);
                 if (!Registries.BLOCK.containsId(id))
                     throw new DataPackException("Block %s does not exist".formatted(blockConfig.block));
                 block = Registries.BLOCK.get(id);
-                //check if the block id matches the one in the config
-                nameCheck = block1 -> block1.equals(block);
             } else {
-                block = null;
-                nameCheck = null;
+                throw new DataPackException("Block name is required");
             }
-
 
             //generate the probability check
             Function<Double, Boolean> probabilityCheck = ResourceReloader.getProbabilityCheck(blockConfig.probability);
@@ -138,8 +129,6 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
             //the code for forcing a blockstate is commented because I was not able to make the castings work as intended
             Consumer<LocalRef<BlockState>> blockStateProcessor;
             if (blockConfig.forced_states != null) {
-                if (block == null)
-                    throw new DataPackException("Forced states can only be used if you specify the block too");
 
                 List<Property.Value> to_set = new LinkedList<>();
                 BlockState blockState = block.getDefaultState();
@@ -171,21 +160,20 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
 
             //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
             currBlockCheck = (r, ref) -> {
-                boolean result = (nameCheck != null ? nameCheck.apply(ref.get().getBlock()) : true)
-                        && (stateCheck != null ? stateCheck.apply(ref.get()) : true)
+                boolean result = (stateCheck != null ? stateCheck.apply(ref.get()) : true)
                         && probabilityCheck.apply(r);
                 if (result && blockStateProcessor != null)
                                  blockStateProcessor.accept(ref);
                 return result;
             };
-            return currBlockCheck;
+            return new Pair<>(block, currBlockCheck);
         } catch (DataPackException dpe){
             ProtoSkyMod.LOGGER.error("Error while baking block check for {}: {}", graceName, dpe.getMessage());
         }
         catch (Throwable ex) {
             ProtoSkyMod.LOGGER.error("Error while baking block check for {}", graceName, ex);
         }
-        return (a, b) -> false;
+        return null;
     }
 
     /**
@@ -278,14 +266,20 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                     BiFunction<Double, LocalRef<Entity>, Boolean> entityCheck;
                     if (config.entities != null) {
                         //start with an always false check to fail in case of empty list
-                        BiFunction<Double, LocalRef<Entity>, Boolean> tmpEntityCheck = (r, ref) -> false;
+                        Map<EntityType,BiFunction<Double, LocalRef<Entity>, Boolean>> checkMap = new HashMap<>();
+
                         for (GraceConfig.EntityConfig entityConfig : config.entities) {
-                            BiFunction<Double, LocalRef<Entity>, Boolean> oldEntityCheck = tmpEntityCheck;
-                            BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck = ResourceReloader.makeEntityCheck(name, entityConfig);
+                            Pair<EntityType<?>, BiFunction<Double, LocalRef<Entity>, Boolean>> currEntityCheck = ResourceReloader.makeEntityCheck(name, entityConfig);
                             //append the new check in or with the previous ones
-                            tmpEntityCheck = (r, ref) -> oldEntityCheck.apply(r, ref) || currEntityCheck.apply(r, ref);
+                            if (currEntityCheck != null)
+                                checkMap.put(currEntityCheck.getLeft(), currEntityCheck.getRight());
                         }
-                        entityCheck = tmpEntityCheck;
+                        entityCheck = (r, ref) -> {
+                            BiFunction<Double, LocalRef<Entity>, Boolean> func = checkMap.get(ref.get().getType());
+                            if (func != null)
+                                return func.apply(r,ref);
+                            return false;
+                        };
                     } else {
                         entityCheck = (r, ref) -> true;
                     }
@@ -293,15 +287,20 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                     //if there is a block check
                     BiFunction<Double, LocalRef<BlockState>, Boolean> blockCheck;
                     if (config.blocks != null) {
+                        Map<Block,BiFunction<Double, LocalRef<BlockState>, Boolean>> checkMap = new HashMap<>();
                         //start with an always false check to fail in case of empty list
-                        BiFunction<Double, LocalRef<BlockState>, Boolean> tmpBlockCheck = (r, ref) -> false;
                         for (GraceConfig.BlockConfig blockConfig : config.blocks) {
-                            BiFunction<Double, LocalRef<BlockState>, Boolean> oldBlockCheck = tmpBlockCheck;
-                            BiFunction<Double, LocalRef<BlockState>, Boolean> currBlockCheck = ResourceReloader.makeBlockCheck(name, blockConfig);
+                            Pair<Block,BiFunction<Double, LocalRef<BlockState>, Boolean>> currBlockCheck = ResourceReloader.makeBlockCheck(name, blockConfig);
                             //append the new check in or with the previous ones
-                            tmpBlockCheck = (r, ref) -> oldBlockCheck.apply(r, ref) || currBlockCheck.apply(r, ref);
+                            if (currBlockCheck != null)
+                                checkMap.put(currBlockCheck.getLeft(),currBlockCheck.getRight());
                         }
-                        blockCheck = tmpBlockCheck;
+                        blockCheck = (r, ref) -> {
+                            BiFunction<Double, LocalRef<BlockState>, Boolean> func = checkMap.get(ref.get().getBlock());
+                            if (func != null)
+                                return func.apply(r,ref);
+                            return false;
+                        };
                     } else {
                         blockCheck = (r, ref) -> true;
                     }

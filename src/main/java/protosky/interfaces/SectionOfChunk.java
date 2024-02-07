@@ -12,5 +12,6 @@ public interface SectionOfChunk {
     void protoSky$setChunk(Chunk chunk);
 
     void protoSky$setSectionIndex(int index);
-    int protoSky$getYOffset(Supplier<Integer> getter);
+    int protoSky$getYOffset();
+    void protoSky$setYOffset(int yOffset);
 }

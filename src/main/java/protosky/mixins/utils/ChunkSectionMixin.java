@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.Unique;
 import protosky.interfaces.SectionOfChunk;
 
 import java.lang.ref.WeakReference;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 @Mixin(ChunkSection.class)
@@ -17,7 +18,7 @@ public class ChunkSectionMixin implements SectionOfChunk {
     private int index = 0;
 
     @Unique
-    private Integer yOffset = null;
+    private int yOffset;
 
     @Override
     public Chunk protoSky$getChunk() {
@@ -33,7 +34,6 @@ public class ChunkSectionMixin implements SectionOfChunk {
     public void protoSky$setChunk(Chunk chunk) {
         if (this.chunk.get() != chunk) {
             this.chunk = new WeakReference<>(chunk);
-            this.yOffset = null;
         }
     }
 
@@ -41,19 +41,15 @@ public class ChunkSectionMixin implements SectionOfChunk {
     public void protoSky$setSectionIndex(int index) {
         if (this.index != index) {
             this.index = index;
-            this.yOffset = null;
         }
     }
 
     @Override
-    public int protoSky$getYOffset(Supplier<Integer> getter) {
-        if (this.yOffset == null)
-            this.yOffset = getter.get();
-
-        if (this.yOffset == null)
-            return 0;
-
+    public int protoSky$getYOffset() {
         return this.yOffset;
+    }    @Override
+    public void protoSky$setYOffset(int yOffset) {
+        this.yOffset = yOffset;
     }
 
 }

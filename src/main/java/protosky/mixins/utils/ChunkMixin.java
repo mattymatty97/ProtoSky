@@ -16,6 +16,7 @@ public class ChunkMixin {
         if (section != null){
             ((SectionOfChunk)section).protoSky$setChunk((Chunk)(Object)this);
             ((SectionOfChunk)section).protoSky$setSectionIndex(yIndex);
+            ((SectionOfChunk)section).protoSky$setYOffset(((Chunk)(Object)this).sectionIndexToCoord(yIndex) * 16);
         }
     }
 }
