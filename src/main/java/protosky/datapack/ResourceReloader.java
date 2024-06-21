@@ -221,7 +221,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
 
 
         //get all json files in the grace tree
-        Map<Identifier, Resource> graceResourceMap = manager.findResources(GRACE_IDENTIFIER.getPath(), id -> id.getPath().endsWith(".json"));
+        Map<Identifier, Resource> graceResourceMap = manager.findResources(GRACE_IDENTIFIER.getPath(), id -> id.getNamespace().equals(MOD_IDENTIFIER.getNamespace()) && id.getPath().endsWith(".json"));
 
         //parse each json
         for (Map.Entry<Identifier, Resource> entry : graceResourceMap.entrySet()) {
@@ -332,86 +332,84 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         }
 
         //get the json file in the spawn tree
-        Map<Identifier, Resource> spawnResourceMap = manager.findResources(SPAWN_IDENTIFIER.getPath(), id -> true);
+        List<Resource> spawnResources = manager.getAllResources(SPAWN_IDENTIFIER);
 
         //parse each json ( should be only one )
-        for (Map.Entry<Identifier, Resource> entry : spawnResourceMap.entrySet()) {
-            try (Reader reader = entry.getValue().getReader()) {
+        for (Resource resource : spawnResources) {
+            try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
-                if (entry.getKey().getPath().equals(SPAWN_IDENTIFIER.getPath())) {
-                    SpawnConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, SpawnConfig.class);
+                SpawnConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, SpawnConfig.class);
 
-                    RegistryKey<World> worldKey = null;
-                    BlockPos spawnPos = null;
+                RegistryKey<World> worldKey = null;
+                BlockPos spawnPos = null;
 
-                    if (config.worldKey != null) {
-                        Identifier worldId = Identifier.tryParse(config.worldKey);
-                        if (worldId != null) {
-                            worldKey = RegistryKey.of(RegistryKeys.WORLD, worldId);
-                        } else {
-                            ProtoSkyMod.LOGGER.warn("Malformed spawn world string: {}", config.worldKey);
-                        }
+                if (config.worldKey != null) {
+                    Identifier worldId = Identifier.tryParse(config.worldKey);
+                    if (worldId != null) {
+                        worldKey = RegistryKey.of(RegistryKeys.WORLD, worldId);
+                    } else {
+                        ProtoSkyMod.LOGGER.warn("Malformed spawn world string: {}", config.worldKey);
                     }
-
-                    if (config.spawnPos != null && config.spawnPos.size() == 3) {
-                        spawnPos = new BlockPos(config.spawnPos.getInt(0), config.spawnPos.getInt(1), config.spawnPos.getInt(2));
-                    }
-
-                    ProtoSkyMod.spawnInfo = new ProtoSkySpawn(worldKey, spawnPos);
                 }
+
+                if (config.spawnPos != null && config.spawnPos.size() == 3) {
+                    spawnPos = new BlockPos(config.spawnPos.getInt(0), config.spawnPos.getInt(1), config.spawnPos.getInt(2));
+                }
+
+                ProtoSkyMod.spawnInfo = new ProtoSkySpawn(worldKey, spawnPos);
             } catch (Throwable t) {
-                ProtoSkyMod.LOGGER.error("Error occurred while loading spawn resource json " + entry.getKey().toString(), t);
+                ProtoSkyMod.LOGGER.error("Error occurred while loading spawn resource json " + SPAWN_IDENTIFIER.toString(), t);
             }
         }
 
         //get the json file in the world tree
-        Map<Identifier, Resource> worldResourceMap = manager.findResources(IGNORED_WORLDS_IDENTIFIER.getPath(), id -> true);
+        List<Resource> worldResources = manager.getAllResources(IGNORED_WORLDS_IDENTIFIER);
 
         //parse each json ( should be only one )
-        for (Map.Entry<Identifier, Resource> entry : worldResourceMap.entrySet()) {
-            try (Reader reader = entry.getValue().getReader()) {
+        for (Resource resource : worldResources) {
+            try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
-                if (entry.getKey().getPath().equals(IGNORED_WORLDS_IDENTIFIER.getPath())) {
-                    String[] config = ProtoSkyMod.JSON_READER.fromJson(reader, String[].class);
+                String[] config = ProtoSkyMod.JSON_READER.fromJson(reader, String[].class);
 
-                    for (String worldkey : config) {
-                        ProtoSkyMod.ignoredWorlds.add(RegistryKey.of(RegistryKeys.WORLD, Identifier.tryParse(worldkey)));
-                    }
+                for (String worldkey : config) {
+                    ProtoSkyMod.ignoredWorlds.add(RegistryKey.of(RegistryKeys.WORLD, Identifier.tryParse(worldkey)));
                 }
             } catch (Throwable t) {
-                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json " + entry.getKey().toString(), t);
+                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json " + IGNORED_WORLDS_IDENTIFIER.toString(), t);
             }
         }
 
         //get the json file in the debug tree
-        Map<Identifier, Resource> debugResourceMap = manager.findResources(DEBUG_IDENTIFIER.getPath(), id -> true);
+        List<Resource> debugResources = manager.getAllResources(DEBUG_IDENTIFIER);
 
         //parse each json ( should be only one )
-        for (Map.Entry<Identifier, Resource> entry : debugResourceMap.entrySet()) {
-            try (Reader reader = entry.getValue().getReader()) {
+        for (Resource resource : debugResources) {
+            try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
-                if (entry.getKey().getPath().equals(DEBUG_IDENTIFIER.getPath())) {
-                    DebugConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, DebugConfig.class);
+                DebugConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, DebugConfig.class);
 
-                    if (config.chunkOriginBlock != null) {
-                        Identifier id = Identifier.tryParse(config.chunkOriginBlock);
-                        if (Registries.BLOCK.containsId(id))
-                            Debug.chunkOriginBlock = Registries.BLOCK.get(id);
-                        else
-                            ProtoSkyMod.LOGGER.warn("Block {} for chunkOriginBlock is invalid", config.chunkOriginBlock);
-                    }
-
-                    if (config.loggingFeatures != null) {
-                        for (String feature : config.loggingFeatures) {
-                            Debug.attemptMap.put(feature, new Debug.AttemptCounter());
-                            if (feature.equals("*"))
-                                Debug.anyAttempt = true;
-                        }
-                    }
-
+                if (config.chunkOriginBlock != null) {
+                    Identifier id = Identifier.tryParse(config.chunkOriginBlock);
+                    if (Registries.BLOCK.containsId(id))
+                        Debug.chunkOriginBlock = Registries.BLOCK.get(id);
+                    else
+                        ProtoSkyMod.LOGGER.warn("Block {} for chunkOriginBlock is invalid", config.chunkOriginBlock);
                 }
+
+                if (config.loggingFeatures != null) {
+                    for (String feature : config.loggingFeatures) {
+                        Debug.attemptMap.put(feature, new Debug.AttemptCounter());
+                        if (feature.equals("*"))
+                            Debug.anyAttempt = true;
+                    }
+                }
+
+                if (config.preventChunkSave != null) {
+                    Debug.preventSave = config.preventChunkSave;
+                }
+
             } catch (Throwable t) {
-                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json " + entry.getKey().toString(), t);
+                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json " + DEBUG_IDENTIFIER.toString(), t);
             }
         }
     }

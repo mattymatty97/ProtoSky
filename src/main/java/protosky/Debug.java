@@ -11,6 +11,8 @@ public class Debug {
     public static Map<String, AttemptCounter> attemptMap = new HashMap<>();
     public static boolean anyAttempt = false;
 
+    public static boolean preventSave = false;
+
     public static Block chunkOriginBlock = null;
 
     public record AttemptCounter(Set<BlockPos> total, Set<BlockPos> graced, Set<BlockPos> vanilla, Set<BlockPos> generated){
