@@ -9,9 +9,6 @@ import java.util.Collection;
  */
 public class GraceConfig {
 
-    //forced map key to be used in case of modded structures/features
-    public String override_name;
-
     //the probability of this specific structure to be placed in the world ( this is on top of vanilla rarity )
     public Double probability;
 

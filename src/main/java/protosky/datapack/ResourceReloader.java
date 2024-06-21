@@ -230,34 +230,37 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                 GraceConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, GraceConfig.class);
 
                 //obtain this config name/key
-                String name = config.override_name;
-                RegistryKey<?> key = null;
-                if (name == null || name.isEmpty() || name.isBlank()) {
-                    //generate the name based on the path the file was
-                    String currPath = entry.getKey().getPath();
-                    //remove the prefix from the path
-                    String main_path = currPath.substring(GRACE_IDENTIFIER.getPath().length());
-                    //remove extra / if present
-                    if (main_path.startsWith("/"))
-                        main_path = main_path.substring(1);
-                    //obtain the tree structure
-                    String[] sections = main_path.split("/");
-                    if (sections.length > 1) {
-                        //first folder is the vanilla namespace
-                        String namespace = sections[0];
-                        //last section is the filename, we trim it from the extension to get the vanilla resource name
-                        String resourceName = sections[sections.length - 1].replace(".json", "");
-                        //generate the vanilla resource path from the remaining parts
-                        List<String> subSections = Arrays.stream(sections).skip(1).limit(sections.length - 2).toList();
-                        Identifier registry = new Identifier(namespace, Strings.join(subSections, "/"));
-                        Identifier resource = new Identifier(namespace, resourceName);
-                        key = RegistryKey.of(RegistryKey.ofRegistry(registry), resource);
-                        name = key.toString();
+                Collection<RegistryKey<?>> keys = new ArrayList<>();
+                //generate the name based on the path the file was
+                String currPath = entry.getKey().getPath();
+                //remove the prefix from the path
+                String main_path = currPath.substring(GRACE_IDENTIFIER.getPath().length());
+                //remove extra / if present
+                if (main_path.startsWith("/"))
+                    main_path = main_path.substring(1);
+                //obtain the tree structure
+                String name = null;
+                String[] sections = main_path.split("/");
+                if (sections.length > 1) {
+                    //first folder is the vanilla namespace
+                    String namespace = sections[0];
+                    //last section is the filename, we trim it from the extension to get the vanilla resource name
+                    String resourceName = sections[sections.length - 1].replace(".json", "");
+                    //generate the vanilla resource path from the remaining parts
+                    List<String> subSections = Arrays.stream(sections).skip(1).limit(sections.length - 2).toList();
+                    String path = Strings.join(subSections, "/");
+                    Identifier resource = new Identifier(namespace, resourceName);
+                    Identifier m_registry = new Identifier(namespace, path);
+                    name = RegistryKey.of(RegistryKey.ofRegistry(m_registry), resource).toString();
+                    for(String n : manager.getAllNamespaces()){
+                        Identifier registry = new Identifier(n, path);
+                        RegistryKey<?> key = RegistryKey.of(RegistryKey.ofRegistry(registry), resource);
+                        keys.add(key);
                     }
                 }
 
                 //do not bother if it was already set
-                if (key != null && !ProtoSkyMod.baked_masks.containsKey(key)) {
+                if (name != null && ProtoSkyMod.baked_masks.keySet().stream().noneMatch(keys::contains)) {
 
                     //bake the probability check
                     Function<Double, Boolean> mainCheck = ResourceReloader.getProbabilityCheck(config.probability);
@@ -323,8 +326,9 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                         }
                     };
 
-                    //and add the mask to the map
-                    ProtoSkyMod.baked_masks.put(key, mask);
+                    for(RegistryKey<?> key : keys){
+                        ProtoSkyMod.baked_masks.put(key, mask);
+                    }
                 }
             } catch (Throwable t) {
                 ProtoSkyMod.LOGGER.error("Error occurred while loading resource json " + entry.getKey().toString(), t);
