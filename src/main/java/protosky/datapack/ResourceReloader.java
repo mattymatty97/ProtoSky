@@ -229,38 +229,44 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                 // cast the json to the Config class
                 GraceConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, GraceConfig.class);
 
+                if (config.override == null)
+                    config.override = new GraceConfig.Override();
+
                 //obtain this config name/key
-                Collection<RegistryKey<?>> keys = new ArrayList<>();
+                RegistryKey<?> key = null;
+
                 //generate the name based on the path the file was
                 String currPath = entry.getKey().getPath();
+
                 //remove the prefix from the path
                 String main_path = currPath.substring(GRACE_IDENTIFIER.getPath().length());
                 //remove extra / if present
                 if (main_path.startsWith("/"))
                     main_path = main_path.substring(1);
+
                 //obtain the tree structure
                 String name = null;
                 String[] sections = main_path.split("/");
                 if (sections.length > 1) {
-                    //first folder is the vanilla namespace
-                    String namespace = sections[0];
+                    //first folder is the namespace
+                    String namespace = config.override.namespace!=null ? config.override.namespace : sections[0];
+
                     //last section is the filename, we trim it from the extension to get the vanilla resource name
-                    String resourceName = sections[sections.length - 1].replace(".json", "");
-                    //generate the vanilla resource path from the remaining parts
+                    String resourceName = config.override.name!=null ? config.override.name : sections[sections.length - 1].replace(".json", "");
+
+                    //generate the resource path from the remaining parts
                     List<String> subSections = Arrays.stream(sections).skip(1).limit(sections.length - 2).toList();
-                    String path = Strings.join(subSections, "/");
-                    Identifier resource = new Identifier(namespace, resourceName);
-                    Identifier m_registry = new Identifier(namespace, path);
-                    name = RegistryKey.of(RegistryKey.ofRegistry(m_registry), resource).toString();
-                    for(String n : manager.getAllNamespaces()){
-                        Identifier registry = new Identifier(n, path);
-                        RegistryKey<?> key = RegistryKey.of(RegistryKey.ofRegistry(registry), resource);
-                        keys.add(key);
-                    }
+                    String path = config.override.path!=null ? config.override.path : Strings.join(subSections, "/");
+
+                    Identifier registryIdentifier = new Identifier(config.override.registry_namespace != null ? config.override.registry_namespace : "minecraft", path);
+                    Identifier resourceIdentifier = new Identifier(namespace, resourceName);
+
+                    key = RegistryKey.of(RegistryKey.ofRegistry(registryIdentifier), resourceIdentifier);
+                    name = key.toString();
                 }
 
                 //do not bother if it was already set
-                if (name != null && ProtoSkyMod.baked_masks.keySet().stream().noneMatch(keys::contains)) {
+                if (key != null && ProtoSkyMod.baked_masks.containsKey(key)) {
 
                     //bake the probability check
                     Function<Double, Boolean> mainCheck = ResourceReloader.getProbabilityCheck(config.probability);
@@ -326,12 +332,10 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                         }
                     };
 
-                    for(RegistryKey<?> key : keys){
-                        ProtoSkyMod.baked_masks.put(key, mask);
-                    }
+                    ProtoSkyMod.baked_masks.put(key, mask);
                 }
             } catch (Throwable t) {
-                ProtoSkyMod.LOGGER.error("Error occurred while loading resource json " + entry.getKey().toString(), t);
+                ProtoSkyMod.LOGGER.error("Error occurred while loading resource json {}", entry.getKey().toString(), t);
             }
         }
 
@@ -362,7 +366,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
 
                 ProtoSkyMod.spawnInfo = new ProtoSkySpawn(worldKey, spawnPos);
             } catch (Throwable t) {
-                ProtoSkyMod.LOGGER.error("Error occurred while loading spawn resource json " + SPAWN_IDENTIFIER.toString(), t);
+                ProtoSkyMod.LOGGER.error("Error occurred while loading spawn resource json {}", SPAWN_IDENTIFIER.toString(), t);
             }
         }
 
@@ -379,7 +383,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                     ProtoSkyMod.ignoredWorlds.add(RegistryKey.of(RegistryKeys.WORLD, Identifier.tryParse(worldkey)));
                 }
             } catch (Throwable t) {
-                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json " + IGNORED_WORLDS_IDENTIFIER.toString(), t);
+                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json {}", IGNORED_WORLDS_IDENTIFIER.toString(), t);
             }
         }
 
@@ -413,7 +417,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                 }
 
             } catch (Throwable t) {
-                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json " + DEBUG_IDENTIFIER.toString(), t);
+                ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json {}", DEBUG_IDENTIFIER.toString(), t);
             }
         }
     }

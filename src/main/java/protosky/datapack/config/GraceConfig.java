@@ -9,6 +9,8 @@ import java.util.Collection;
  */
 public class GraceConfig {
 
+    public Override override = new Override();
+
     //the probability of this specific structure to be placed in the world ( this is on top of vanilla rarity )
     public Double probability;
 
@@ -51,6 +53,13 @@ public class GraceConfig {
         //the probability of this specific blokc/entity to be placed in the world
         public Double probability;
 
+    }
+
+    public static class Override {
+        public String name;
+        public String namespace;
+        public String path;
+        public String registry_namespace;
     }
 
 }
