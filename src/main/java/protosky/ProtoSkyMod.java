@@ -1,5 +1,6 @@
 package protosky;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.api.ModInitializer;
@@ -27,7 +28,7 @@ public class ProtoSkyMod implements ModInitializer {
     private static final Runnable NOOP = () -> {};
     public static final ResourceBundle PLACEHOLDERS;
     public static final Logger LOGGER;
-    public static final Gson JSON_READER = new GsonBuilder().setLenient().disableHtmlEscaping().create();
+    public static final ObjectMapper JSON_READER = new ObjectMapper();
 
     // CONSTANTS
     public static final String GRACES_TAG = "protosky_graces";

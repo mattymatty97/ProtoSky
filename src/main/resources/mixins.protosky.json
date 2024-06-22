@@ -27,9 +27,7 @@
     "worldgen.features.ChunkSectionMixin",
     "worldgen.features.ChunkSerializerMixin",
     "worldgen.features.PlacedFeatureMixin",
-    "worldgen.features.WrappedProtoChunkMixin"
-  ],
-  "offMixins": [
+    "worldgen.features.WrappedProtoChunkMixin",
     "debug.ThreadedAnvilChunkStorageMixin"
   ],
   "injectors": {
