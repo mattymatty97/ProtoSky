@@ -28,7 +28,6 @@ dependencies {
 	implementation( annotationProcessor( "io.github.llamalad7:mixinextras-fabric:${project.mixin_extras_fabric_version}"))
 
 	include(implementation 'com.lmax:disruptor:4.0.0')
-	include(implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1')
 }
 
 base {

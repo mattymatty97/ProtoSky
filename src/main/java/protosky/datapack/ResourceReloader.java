@@ -227,16 +227,10 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         for (Map.Entry<Identifier, Resource> entry : graceResourceMap.entrySet()) {
             try (Reader reader = entry.getValue().getReader()) {
                 // cast the json to the Config class
-                GraceConfig config = ProtoSkyMod.JSON_READER.readValue(reader, GraceConfig.class);
+                GraceConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, GraceConfig.class);
 
                 if (config.override == null)
                     config.override = new GraceConfig.Override();
-
-                Collection<String> unknownProperties = config.getUnknown(false).keySet();
-
-                if (!unknownProperties.isEmpty()){
-                    ProtoSkyMod.LOGGER.warn("Ignoring unknown properties for \"{}\" from \"{}\": [ {} ]", entry.getKey().toString(), entry.getValue().getPack().getName() , String.join(" , ", unknownProperties));
-                }
 
                 //obtain this config name/key
                 RegistryKey<?> key = null;
@@ -352,7 +346,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         for (Resource resource : spawnResources) {
             try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
-                SpawnConfig config = ProtoSkyMod.JSON_READER.readValue(reader, SpawnConfig.class);
+                SpawnConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, SpawnConfig.class);
 
                 RegistryKey<World> worldKey = null;
                 BlockPos spawnPos = null;
@@ -383,7 +377,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         for (Resource resource : worldResources) {
             try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
-                String[] config = ProtoSkyMod.JSON_READER.readValue(reader, String[].class);
+                String[] config = ProtoSkyMod.JSON_READER.fromJson(reader, String[].class);
 
                 for (String worldkey : config) {
                     ProtoSkyMod.ignoredWorlds.add(RegistryKey.of(RegistryKeys.WORLD, Identifier.tryParse(worldkey)));
@@ -400,7 +394,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         for (Resource resource : debugResources) {
             try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
-                DebugConfig config = ProtoSkyMod.JSON_READER.readValue(reader, DebugConfig.class);
+                DebugConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, DebugConfig.class);
 
                 if (config.chunkOriginBlock != null) {
                     Identifier id = Identifier.tryParse(config.chunkOriginBlock);
