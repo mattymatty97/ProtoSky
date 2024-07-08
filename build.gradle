@@ -26,8 +26,6 @@ dependencies {
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
 	implementation( annotationProcessor( "io.github.llamalad7:mixinextras-fabric:${project.mixin_extras_fabric_version}"))
-
-	include(implementation 'com.lmax:disruptor:4.0.0')
 }
 
 base {

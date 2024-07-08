@@ -182,18 +182,30 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
      * @param probability the probability to be checked against. range -> [0.0, 1.0]
      * @return the probability check
      */
-    private static Function<Double, Boolean> getProbabilityCheck(Double probability) {
+    private static Function<Double, Boolean> getProbabilityCheck(Double probability){
+        return getProbabilityCheck(probability, 1.0);
+    }
+
+    /**
+     * prepare the probability check given the Double value
+     *
+     * @param probability the probability to be checked against. range -> [0.0, 1.0]
+     * @param defaultProbability the value in case of null. range -> [0.0, 1.0]
+     * @return the probability check
+     */
+    private static Function<Double, Boolean> getProbabilityCheck(Double probability, double defaultProbability) {
         Function<Double, Boolean> probabilityCheck;
-        if (probability != null) {
-            if (probability < 1.0 && probability > 0.0)
-                probabilityCheck = value -> value < probability;
-            else if (probability <= 0.0)
-                probabilityCheck = value -> false;
-            else
-                probabilityCheck = r -> true;
-        } else {
+        double finalProbability;
+
+        finalProbability = Objects.requireNonNullElse(probability, defaultProbability);
+
+        if (finalProbability < 1.0 && finalProbability > 0.0)
+            probabilityCheck = value -> value < finalProbability;
+        else if (finalProbability <= 0.0)
+            probabilityCheck = value -> false;
+        else
             probabilityCheck = r -> true;
-        }
+
         return probabilityCheck;
     }
 
@@ -247,7 +259,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                 //obtain the tree structure
                 String name = null;
                 String[] sections = main_path.split("/");
-                if (sections.length > 1) {
+                if (sections.length > 1 || (config.override.namespace!=null && config.override.name!=null && config.override.path!=null)) {
                     //first folder is the namespace
                     String namespace = config.override.namespace!=null ? config.override.namespace : sections[0];
 
@@ -269,7 +281,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                 if (key != null && ProtoSkyMod.baked_masks.containsKey(key)) {
 
                     //bake the probability check
-                    Function<Double, Boolean> mainCheck = ResourceReloader.getProbabilityCheck(config.probability);
+                    Function<Double, Boolean> mainCheck = ResourceReloader.getProbabilityCheck(config.probability, 0);
 
                     //if there is an entity section iterate over it
                     BiFunction<Double, LocalRef<Entity>, Boolean> entityCheck;

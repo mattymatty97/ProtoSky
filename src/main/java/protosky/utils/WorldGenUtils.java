@@ -1,4 +1,4 @@
-package protosky;
+package protosky.utils;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -14,6 +14,7 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.*;
+import protosky.Debug;
 import protosky.interfaces.GraceHolder;
 import protosky.interfaces.RetrogenHolder;
 
