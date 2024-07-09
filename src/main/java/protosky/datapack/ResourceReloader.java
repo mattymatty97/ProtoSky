@@ -278,7 +278,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                 }
 
                 //do not bother if it was already set
-                if (key != null && ProtoSkyMod.baked_masks.containsKey(key)) {
+                if (key != null && !ProtoSkyMod.baked_masks.containsKey(key)) {
 
                     //bake the probability check
                     Function<Double, Boolean> mainCheck = ResourceReloader.getProbabilityCheck(config.probability, 0);
