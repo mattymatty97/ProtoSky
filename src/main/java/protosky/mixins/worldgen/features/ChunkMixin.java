@@ -1,8 +1,6 @@
 package protosky.mixins.worldgen.features;
 
-import com.google.common.collect.ImmutableSet;
 import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registry;
@@ -22,7 +20,6 @@ import protosky.interfaces.GraceHolder;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 
 @Mixin(Chunk.class)
 public abstract class ChunkMixin implements GraceHolder {
@@ -53,7 +50,7 @@ public abstract class ChunkMixin implements GraceHolder {
 
     @Override
     public Set<NbtCompound> protoSky$getGracedEntities() {
-        return ImmutableSet.copyOf(gracedEntities);
+        return gracedEntities;
     }
 
     @Override
