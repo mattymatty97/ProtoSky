@@ -1,11 +1,14 @@
 plugins {
-	id 'fabric-loom' version '1.2-SNAPSHOT'
-	id 'io.github.juuxel.loom-quiltflower' version '1.10.0'
+    id 'fabric-loom' version "${loom_version}"
+    id 'maven-publish'
 }
 
 version = project.mod_version
 group = project.maven_group
 def buildnumber = 1
+base {
+    archivesName = project.archives_base_name
+}
 
 repositories {
 	// Add repositories to retrieve artifacts from in here.
@@ -25,7 +28,7 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-	implementation( annotationProcessor( "io.github.llamalad7:mixinextras-fabric:${project.mixin_extras_fabric_version}"))
+	//implementation( annotationProcessor( "io.github.llamalad7:mixinextras-fabric:${project.mixin_extras_fabric_version}"))
 }
 
 base {
@@ -73,9 +76,11 @@ java {
 }
 
 jar {
-	from("LICENSE") {
-		rename { "${it}_${base.archivesName.get()}"}
-	}
+    inputs.property "archivesName", project.base.archivesName
+
+    from("LICENSE") {
+        rename { "${it}_${inputs.properties.archivesName}"}
+    }
 }
 
 tasks.register("updateBuildNumber"){
