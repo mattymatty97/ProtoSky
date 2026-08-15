@@ -66,16 +66,15 @@ public class WorldGenUtils
 
     }
 
-    public static final Set<Heightmap.Type> ALL_HEIGHTMAPS = Arrays.stream(Heightmap.Type.values()).collect(Collectors.toUnmodifiableSet());
-
     /**
      * Regenerate the Heightmaps of the specified chunk
      * @param chunk the chunk to edit
      */
     public static void resetHeightMaps(Chunk chunk) {
-
-        Heightmap.populateHeightmaps(chunk , ALL_HEIGHTMAPS);
-
+        for (Heightmap.Type type : ChunkStatus.POST_CARVER_HEIGHTMAPS) {
+            Heightmap map = chunk.getHeightmap(type);
+            chunk.setHeightmap(type, new long[map.asLongArray().length]);
+        }
     }
 
     /**

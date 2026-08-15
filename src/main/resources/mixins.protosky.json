@@ -3,6 +3,7 @@
   "package": "protosky.mixins",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "debug.ThreadedAnvilChunkStorageMixin",
     "accessors.ChunkRegionAccessor",
     "accessors.ChunkStatusInvoker",
     "accessors.PlacedFeatureAccessor",
@@ -28,9 +29,6 @@
     "worldgen.features.ChunkSerializerMixin",
     "worldgen.features.PlacedFeatureMixin",
     "worldgen.features.WrappedProtoChunkMixin"
-  ],
-  "offMixins": [
-    "debug.ThreadedAnvilChunkStorageMixin"
   ],
   "injectors": {
     "defaultRequire": 1

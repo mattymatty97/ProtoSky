@@ -69,8 +69,9 @@ public abstract class ChunkStatusMixin {
                                     WorldGenUtils.deleteBlocks(chunk, world);
                                     WorldGenUtils.clearEntities((ProtoChunk) chunk, world);
 
-                                    WorldGenUtils.restoreBlocks(chunk, world);
                                     WorldGenUtils.resetHeightMaps(chunk);
+
+                                    WorldGenUtils.restoreBlocks(chunk, world);
                                     WorldGenUtils.restoreEntities((ProtoChunk) chunk, world);
                                 }
 
