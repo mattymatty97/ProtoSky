@@ -1,9 +1,9 @@
 package protosky.interfaces;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Map;
 import java.util.Set;
@@ -15,7 +15,8 @@ public interface GraceHolder {
     Map<BlockPos, BlockState> protoSky$getGracedBlocks();
 
     void protoSky$putGracedBlock(BlockPos pos, BlockState state);
-    Set<NbtCompound> protoSky$getGracedEntities();
+
+    Set<CompoundTag> protoSky$getGracedEntities();
 
     void protoSky$putGracedEntity(Entity entity);
 }

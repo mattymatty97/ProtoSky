@@ -1,9 +1,9 @@
 package protosky;
 
-import net.minecraft.util.math.random.ChunkRandom;
-import net.minecraft.world.ChunkRegion;
-import net.minecraft.world.gen.feature.PlacedFeature;
-import net.minecraft.world.gen.structure.Structure;
+import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.levelgen.WorldgenRandom;
+import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import protosky.datapack.ProtoSkySpawn;
 
 import java.util.Queue;
@@ -11,9 +11,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ThreadLocals {
     public static ThreadLocal<ProtoSkySpawn> forcedSpawn = new ThreadLocal<>();
-    public static ThreadLocal<ChunkRandom> graceRandom = new ThreadLocal<>();
+    public static ThreadLocal<WorldgenRandom> graceRandom = new ThreadLocal<>();
 
-    public static ThreadLocal<ChunkRegion> currentRegion = new ThreadLocal<>();
+    public static ThreadLocal<WorldGenRegion> currentRegion = new ThreadLocal<>();
 
     public static final ThreadLocal<Queue<Structure>> currentStructure = ThreadLocal.withInitial(ConcurrentLinkedQueue::new);
 

@@ -1,7 +1,5 @@
 package protosky.datapack.config;
 
-import protosky.datapack.ResourceReloader;
-
 import java.util.Collection;
 
 /**

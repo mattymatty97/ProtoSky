@@ -1,6 +1,6 @@
 package protosky.exceptions;
 
-public class DataPackException extends RuntimeException{
+public class DataPackException extends RuntimeException {
     public DataPackException() {
     }
 

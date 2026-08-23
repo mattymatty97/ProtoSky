@@ -1,8 +1,8 @@
 package protosky.datapack;
 
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
-public record ProtoSkySpawn(RegistryKey<World> spawnWorld, BlockPos spawnPos) {
+public record ProtoSkySpawn(ResourceKey<Level> spawnWorld, BlockPos spawnPos) {
 }

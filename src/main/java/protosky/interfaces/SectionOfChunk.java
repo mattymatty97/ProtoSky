@@ -1,17 +1,17 @@
 package protosky.interfaces;
 
-import net.minecraft.world.chunk.Chunk;
-
-import java.util.function.Supplier;
+import net.minecraft.world.level.chunk.ChunkAccess;
 
 public interface SectionOfChunk {
-    Chunk protoSky$getChunk();
+    ChunkAccess protoSky$getChunk();
 
     int protoSky$getSectionIndex();
 
-    void protoSky$setChunk(Chunk chunk);
+    void protoSky$setChunk(ChunkAccess chunk);
 
     void protoSky$setSectionIndex(int index);
+
     int protoSky$getYOffset();
+
     void protoSky$setYOffset(int yOffset);
 }
