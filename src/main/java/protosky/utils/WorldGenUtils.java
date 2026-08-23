@@ -16,9 +16,11 @@ import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.levelgen.BelowZeroRetrogen;
 import net.minecraft.world.level.levelgen.Heightmap;
 import protosky.Debug;
+import protosky.ProtoSkyMod;
 import protosky.interfaces.GraceHolder;
 import protosky.interfaces.RetrogenHolder;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
@@ -70,6 +72,33 @@ public class WorldGenUtils {
      *
      * @param chunk the chunk to edit
      */
+    public static void fillCustomHeightmaps(ChunkAccess chunk) {
+        //fixes for RetroGen
+        ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
+        boolean had_retrogen = old_status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT);
+
+        //keep old heightmaps if we had retrogen
+        if (had_retrogen)
+            return;
+
+        if (chunk.hasPrimedHeightmap(Heightmap.Types.WORLD_SURFACE))
+        {
+            Heightmap current = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE);
+            chunk.setHeightmap(Heightmap.Types.PROTO_SKY_VANILLA_WORLD_SURFACE, current.getRawData());
+        }
+
+        if (chunk.hasPrimedHeightmap(Heightmap.Types.OCEAN_FLOOR))
+        {
+            Heightmap current = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR);
+            chunk.setHeightmap(Heightmap.Types.PROTO_SKY_VANILLA_OCEAN_FLOOR, current.getRawData());
+        }
+    }
+
+    /**
+     * Regenerate the Heightmaps of the specified chunk
+     *
+     * @param chunk the chunk to edit
+     */
     public static void resetHeightMaps(ChunkAccess chunk) {
         //fixes for RetroGen
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
@@ -79,7 +108,11 @@ public class WorldGenUtils {
         if (had_retrogen)
             return;
 
+        //empty the heightmaps, they will be filled again when the graced blocks are restored
         for (Heightmap.Types type : ChunkStatus.POST_FEATURES) {
+            if (ProtoSkyMod.CUSTOM_HEIGHTMAPS.contains(type))
+                continue;
+
             Heightmap map = chunk.getOrCreateHeightmapUnprimed(type);
             chunk.setHeightmap(type, new long[map.getRawData().length]);
         }

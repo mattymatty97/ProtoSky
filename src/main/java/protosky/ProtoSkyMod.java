@@ -10,6 +10,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.placement.PlacedFeature;
@@ -33,8 +34,12 @@ public class ProtoSkyMod implements ModInitializer {
     // CONSTANTS
     public static final String GRACES_TAG = "protosky_graces";
     public static final String OLD_STATUS_TAG = "protosky_old_status";
+
+    public static final EnumSet<Heightmap.Types> CUSTOM_HEIGHTMAPS = EnumSet.of(Heightmap.Types.PROTO_SKY_VANILLA_OCEAN_FLOOR, Heightmap.Types.PROTO_SKY_VANILLA_WORLD_SURFACE);
+
     public static final FeatureWorldMask EMPTY_MASK = new FeatureWorldMask() {
     };
+
 
     public static final FeatureWorldMask DEFAULT_MASK = new FeatureWorldMask() {
 

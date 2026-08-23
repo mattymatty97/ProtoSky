@@ -1,0 +1,6 @@
+classTweaker v2 named
+
+transitive-mutable field net/minecraft/world/level/chunk/ChunkStatus POST_FEATURES Ljava/util/EnumSet;
+
+extend-enum net/minecraft/world/level/levelgen/Heightmap$Types  PROTO_SKY_VANILLA_WORLD_SURFACE
+extend-enum net/minecraft/world/level/levelgen/Heightmap$Types  PROTO_SKY_VANILLA_OCEAN_FLOOR

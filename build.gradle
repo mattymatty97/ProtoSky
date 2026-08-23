@@ -54,7 +54,7 @@ processResources {
 }
 
 loom {
-	accessWidenerPath = file("src/main/resources/protosky.accesswidener")
+	accessWidenerPath = file("src/main/resources/protosky.classtweaker")
 }
 
 tasks.withType(JavaCompile).configureEach {

@@ -1,5 +1,7 @@
 package protosky.mixins.worldgen;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.datafixers.util.Either;
 import net.minecraft.server.level.ChunkHolder;
@@ -7,6 +9,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.ProtoChunk;
+import net.minecraft.world.level.levelgen.Heightmap;
+import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,16 +19,29 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import protosky.ProtoSkyMod;
 import protosky.utils.WorldGenUtils;
 
+import java.util.EnumSet;
+
 @Mixin(ChunkStatus.class)
 public abstract class ChunkStatusMixin {
 
+    @WrapOperation(method = "<clinit>",
+            at = @At(value = "FIELD", target = "Lnet/minecraft/world/level/chunk/ChunkStatus;POST_FEATURES:Ljava/util/EnumSet;", opcode = Opcodes.PUTSTATIC)
+    )
+    private static void patch_heightmaps(EnumSet<Heightmap.Types> types, Operation<Void> original){
+        types.add(Heightmap.Types.PROTO_SKY_VANILLA_WORLD_SURFACE);
+        types.add(Heightmap.Types.PROTO_SKY_VANILLA_OCEAN_FLOOR);
+        original.call(types);
+    }
+
     @Inject(method = "method_51376(Lnet/minecraft/world/level/chunk/ChunkStatus;Ljava/util/concurrent/Executor;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkGenerator;Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager;Lnet/minecraft/server/level/ThreadedLevelLightEngine;Ljava/util/function/Function;Ljava/util/List;Lnet/minecraft/world/level/chunk/ChunkAccess;)Ljava/util/concurrent/CompletableFuture;", at = @At("HEAD"))
     private static void on_initialize_light(CallbackInfoReturnable<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> cir,
-                                            @Local(argsOnly = true) ServerLevel world,
-                                            @Local(argsOnly = true) ChunkAccess chunk
+                                            @Local(argsOnly = true, name = "serverLevel") ServerLevel world,
+                                            @Local(argsOnly = true, name = "chunkAccess") ChunkAccess chunk
     ) {
         //if the world is in the ignored list, do nothing and let vanilla code run
         if (ProtoSkyMod.ignoredWorlds.contains(world.dimension())) return;
+
+        WorldGenUtils.fillCustomHeightmaps(chunk);
 
         WorldGenUtils.deleteBlocks(chunk, world);
         WorldGenUtils.clearEntities((ProtoChunk) chunk, world);
@@ -37,7 +54,7 @@ public abstract class ChunkStatusMixin {
 
     @Inject(method = "method_17033(Lnet/minecraft/world/level/chunk/ChunkStatus;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkGenerator;Ljava/util/List;Lnet/minecraft/world/level/chunk/ChunkAccess;)V", at = @At("HEAD"), cancellable = true)
     private static void on_spawn(CallbackInfo ci,
-                                 @Local(argsOnly = true) ServerLevel world
+                                 @Local(argsOnly = true, name = "serverLevel") ServerLevel world
     ) {
         //if the world is in the ignored list, do nothing and let vanilla code run
         if (ProtoSkyMod.ignoredWorlds.contains(world.dimension())) return;
