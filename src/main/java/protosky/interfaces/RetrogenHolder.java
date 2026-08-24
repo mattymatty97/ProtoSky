@@ -1,6 +1,6 @@
 package protosky.interfaces;
 
-import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraft.world.chunk.ChunkStatus;
 
 public interface RetrogenHolder {
     ChunkStatus protoSky$getPreviousStatus();

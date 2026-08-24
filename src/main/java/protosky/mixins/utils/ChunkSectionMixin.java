@@ -1,17 +1,17 @@
 package protosky.mixins.utils;
 
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.ChunkSection;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import protosky.interfaces.SectionOfChunk;
 
 import java.lang.ref.WeakReference;
 
-@Mixin(LevelChunkSection.class)
-public class LevelChunkSectionMixin implements SectionOfChunk {
+@Mixin(ChunkSection.class)
+public class ChunkSectionMixin implements SectionOfChunk {
     @Unique
-    private WeakReference<ChunkAccess> chunk = new WeakReference<>(null);
+    private WeakReference<Chunk> chunk = new WeakReference<>(null);
     @Unique
     private int index = 0;
 
@@ -19,7 +19,7 @@ public class LevelChunkSectionMixin implements SectionOfChunk {
     private int yOffset;
 
     @Override
-    public ChunkAccess protoSky$getChunk() {
+    public Chunk protoSky$getChunk() {
         return this.chunk.get();
     }
 
@@ -29,7 +29,7 @@ public class LevelChunkSectionMixin implements SectionOfChunk {
     }
 
     @Override
-    public void protoSky$setChunk(ChunkAccess chunk) {
+    public void protoSky$setChunk(Chunk chunk) {
         if (this.chunk.get() != chunk) {
             this.chunk = new WeakReference<>(chunk);
         }

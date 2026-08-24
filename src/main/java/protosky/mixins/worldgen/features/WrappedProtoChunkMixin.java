@@ -1,11 +1,11 @@
 package protosky.mixins.worldgen.features;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ImposterProtoChunk;
-import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.entity.Entity;
+import net.minecraft.block.BlockState;
+import net.minecraft.world.chunk.WrapperProtoChunk;
+import net.minecraft.world.chunk.WorldChunk;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -14,12 +14,12 @@ import protosky.interfaces.GraceHolder;
 import java.util.Map;
 import java.util.Set;
 
-@Mixin(ImposterProtoChunk.class)
+@Mixin(WrapperProtoChunk.class)
 public class WrappedProtoChunkMixin implements GraceHolder {
 
     @Shadow
     @Final
-    private LevelChunk wrapped;
+    private WorldChunk wrapped;
 
     @Override
     public Map<BlockPos, BlockState> protoSky$getGracedBlocks() {
@@ -32,7 +32,7 @@ public class WrappedProtoChunkMixin implements GraceHolder {
     }
 
     @Override
-    public Set<CompoundTag> protoSky$getGracedEntities() {
+    public Set<NbtCompound> protoSky$getGracedEntities() {
         return ((GraceHolder) wrapped).protoSky$getGracedEntities();
     }
 

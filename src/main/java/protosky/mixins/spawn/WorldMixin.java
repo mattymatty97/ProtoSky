@@ -2,17 +2,17 @@ package protosky.mixins.spawn;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import protosky.ThreadLocals;
 import protosky.datapack.ProtoSkySpawn;
 
-@Mixin(Level.class)
-public class LevelMixin {
+@Mixin(World.class)
+public class WorldMixin {
 
-    @WrapOperation(method = "getSharedSpawnPos", at = @At(value = "NEW", target = "(III)Lnet/minecraft/core/BlockPos;"))
+    @WrapOperation(method = "getSpawnPos", at = @At(value = "NEW", target = "(III)Lnet/minecraft/util/math/BlockPos;"))
     private BlockPos forcedSpawnPos(int posx, int posy, int posz, Operation<BlockPos> original) {
         ProtoSkySpawn forcedSpawn = ThreadLocals.forcedSpawn.get();
         if (forcedSpawn != null && forcedSpawn.spawnPos() != null) {

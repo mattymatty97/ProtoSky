@@ -1,7 +1,7 @@
 package protosky.interfaces;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.registry.RegistryKey;
 
 public interface GenerationMaskHolder {
 
@@ -9,9 +9,9 @@ public interface GenerationMaskHolder {
 
     void protoSky$updateRollbacks(BlockPos pos, boolean remove);
 
-    void protoSky$setMask(ResourceKey<?>[] keys, BlockPos origin);
+    void protoSky$setMask(RegistryKey<?>[] keys, BlockPos origin);
 
-    void protoSky$unsetMask(ResourceKey<?>[] keys, BlockPos origin);
+    void protoSky$unsetMask(RegistryKey<?>[] keys, BlockPos origin);
 
     void protoSky$logMask(boolean wasGenerated);
 }

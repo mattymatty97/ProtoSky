@@ -3,20 +3,20 @@ package protosky.datapack;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import joptsimple.internal.Strings;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.resources.Resource;
-import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.util.Tuple;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.util.Identifier;
+import net.minecraft.resource.Resource;
+import net.minecraft.resource.ResourceManager;
+import net.minecraft.util.Pair;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.world.World;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.state.property.Property;
 import protosky.Debug;
 import protosky.ProtoSkyMod;
 import protosky.datapack.config.DebugConfig;
@@ -33,11 +33,11 @@ import java.util.function.Function;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ResourceReloader implements SimpleSynchronousResourceReloadListener {
-    private static final ResourceLocation MOD_IDENTIFIER = new ResourceLocation("protosky", "");
-    public static final ResourceLocation GRACE_IDENTIFIER = MOD_IDENTIFIER.withPath("grace");
-    public static final ResourceLocation SPAWN_IDENTIFIER = MOD_IDENTIFIER.withPath("spawn/forced.json");
-    public static final ResourceLocation DEBUG_IDENTIFIER = MOD_IDENTIFIER.withPath("debug.json");
-    public static final ResourceLocation IGNORED_WORLDS_IDENTIFIER = MOD_IDENTIFIER.withPath("world/ignored.json");
+    private static final Identifier MOD_IDENTIFIER = new Identifier("protosky", "");
+    public static final Identifier GRACE_IDENTIFIER = MOD_IDENTIFIER.withPath("grace");
+    public static final Identifier SPAWN_IDENTIFIER = MOD_IDENTIFIER.withPath("spawn/forced.json");
+    public static final Identifier DEBUG_IDENTIFIER = MOD_IDENTIFIER.withPath("debug.json");
+    public static final Identifier IGNORED_WORLDS_IDENTIFIER = MOD_IDENTIFIER.withPath("world/ignored.json");
 
     /**
      * Bake the check for the specified entity Object
@@ -45,16 +45,16 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
      * @param entityConfig the config for the current check
      * @return the baked function to be checked against
      */
-    private static Tuple<EntityType<?>, BiFunction<Double, LocalRef<Entity>, Boolean>> makeEntityCheck(String graceName, GraceConfig.EntityConfig entityConfig) {
+    private static Pair<EntityType<?>, BiFunction<Double, LocalRef<Entity>, Boolean>> makeEntityCheck(String graceName, GraceConfig.EntityConfig entityConfig) {
         try {
             BiFunction<Double, LocalRef<Entity>, Boolean> currEntityCheck;
             EntityType<?> type;
 
             if (entityConfig.entity != null) {
-                ResourceLocation id = ResourceLocation.tryParse(entityConfig.entity);
-                if (!BuiltInRegistries.ENTITY_TYPE.containsKey(id))
+                Identifier id = Identifier.tryParse(entityConfig.entity);
+                if (!Registries.ENTITY_TYPE.containsId(id))
                     throw new DataPackException("Entity %s does not exist".formatted(entityConfig.entity));
-                type = BuiltInRegistries.ENTITY_TYPE.get(id);
+                type = Registries.ENTITY_TYPE.get(id);
             } else {
                 throw new DataPackException("Entity name is required");
             }
@@ -64,7 +64,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
 
             //combine all the checks in AND with each other, have the count check last, so it will only trigger when all the other checks are positive
             currEntityCheck = (r, ref) -> probabilityCheck.apply(r);
-            return new Tuple<>(type, currEntityCheck);
+            return new Pair<>(type, currEntityCheck);
         } catch (DataPackException ex) {
             ProtoSkyMod.LOGGER.error("Error while baking entity check for {}: {}", graceName, ex.getMessage());
         } catch (Throwable ex) {
@@ -79,7 +79,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
      * @param blockConfig the config for the current check
      * @return the baked function to be checked against
      */
-    private static Tuple<Block, BiFunction<Double, LocalRef<BlockState>, Boolean>> makeBlockCheck(String graceName, GraceConfig.BlockConfig blockConfig) {
+    private static Pair<Block, BiFunction<Double, LocalRef<BlockState>, Boolean>> makeBlockCheck(String graceName, GraceConfig.BlockConfig blockConfig) {
 
         try {
             Block block;
@@ -87,10 +87,10 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
 
             //if it has a name check
             if (blockConfig.block != null) {
-                ResourceLocation id = ResourceLocation.tryParse(blockConfig.block);
-                if (!BuiltInRegistries.BLOCK.containsKey(id))
+                Identifier id = Identifier.tryParse(blockConfig.block);
+                if (!Registries.BLOCK.containsId(id))
                     throw new DataPackException("Block %s does not exist".formatted(blockConfig.block));
-                block = BuiltInRegistries.BLOCK.get(id);
+                block = Registries.BLOCK.get(id);
             } else {
                 throw new DataPackException("Block name is required");
             }
@@ -110,7 +110,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                     Function<BlockState, Boolean> localStateCheck = blockState -> {
                         Collection<Property<?>> properties = blockState.getProperties();
                         Optional<Property<?>> optionalProperty = properties.stream().filter(p -> p.getName().equals(stateConfig.key)).findAny();
-                        return optionalProperty.filter(property -> blockState.getValue(property).toString().equals(stateConfig.value.toString())).isPresent();
+                        return optionalProperty.filter(property -> blockState.get(property).toString().equals(stateConfig.value.toString())).isPresent();
                     };
                     //combine the checks in AND with each other
                     tmpStateCheck = blockState -> currStateCheck.apply(blockState) && localStateCheck.apply(blockState);
@@ -125,25 +125,25 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
             if (blockConfig.forced_states != null) {
 
                 List<Property.Value> to_set = new LinkedList<>();
-                BlockState blockState = block.defaultBlockState();
+                BlockState blockState = block.getDefaultState();
                 for (GraceConfig.BlockConfig.StateConfig stateConfig : blockConfig.forced_states) {
 
                     Property property = blockState.getProperties().stream().filter(p -> p.getName().equals(stateConfig.key)).findAny().orElse(null);
                     if (property == null)
                         throw new DataPackException("Property %s is not a property of block %s".formatted(stateConfig.key, blockConfig.block));
 
-                    Optional value = property.getValue(stateConfig.value.toString());
+                    Optional value = property.parse(stateConfig.value.toString());
                     if (value.isEmpty())
                         throw new DataPackException("Property %s is not a valid value for %s ".formatted(stateConfig.value, stateConfig.key));
 
-                    to_set.add(property.value((Comparable) value.get()));
+                    to_set.add(property.createValue((Comparable) value.get()));
 
                 }
 
                 blockStateProcessor = ref -> {
                     BlockState state = ref.get();
                     for (Property.Value value : to_set) {
-                        state = state.setValue(value.property(), value.value());
+                        state = state.with(value.property(), value.value());
                     }
                     ref.set(state);
                 };
@@ -160,7 +160,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                     blockStateProcessor.accept(ref);
                 return result;
             };
-            return new Tuple<>(block, currBlockCheck);
+            return new Pair<>(block, currBlockCheck);
         } catch (DataPackException dpe) {
             ProtoSkyMod.LOGGER.error("Error while baking block check for {}: {}", graceName, dpe.getMessage());
         } catch (Throwable ex) {
@@ -203,12 +203,12 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
     }
 
     @Override
-    public ResourceLocation getFabricId() {
+    public Identifier getFabricId() {
         return MOD_IDENTIFIER;
     }
 
     @Override
-    public void onResourceManagerReload(ResourceManager manager) {
+    public void reload(ResourceManager manager) {
         //forget old data
         ProtoSkyMod.baked_masks.clear();
         ProtoSkyMod.spawnInfo = new ProtoSkySpawn(null, null);
@@ -225,11 +225,11 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
 
 
         //get all json files in the grace tree
-        Map<ResourceLocation, Resource> graceResourceMap = manager.listResources(GRACE_IDENTIFIER.getPath(), id -> id.getNamespace().equals(MOD_IDENTIFIER.getNamespace()) && id.getPath().endsWith(".json"));
+        Map<Identifier, Resource> graceResourceMap = manager.findResources(GRACE_IDENTIFIER.getPath(), id -> id.getNamespace().equals(MOD_IDENTIFIER.getNamespace()) && id.getPath().endsWith(".json"));
 
         //parse each json
-        for (Map.Entry<ResourceLocation, Resource> entry : graceResourceMap.entrySet()) {
-            try (Reader reader = entry.getValue().openAsReader()) {
+        for (Map.Entry<Identifier, Resource> entry : graceResourceMap.entrySet()) {
+            try (Reader reader = entry.getValue().getReader()) {
                 // cast the json to the Config class
                 GraceConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, GraceConfig.class);
 
@@ -237,7 +237,7 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                     config.override = new GraceConfig.Override();
 
                 //obtain this config name/key
-                ResourceKey<?> key = null;
+                RegistryKey<?> key = null;
 
                 //generate the name based on the path the file was
                 String currPath = entry.getKey().getPath();
@@ -262,10 +262,10 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                     List<String> subSections = Arrays.stream(sections).skip(1).limit(sections.length - 2).toList();
                     String path = config.override.path != null ? config.override.path : Strings.join(subSections, "/");
 
-                    ResourceLocation registryIdentifier = new ResourceLocation(config.override.registry_namespace != null ? config.override.registry_namespace : "minecraft", path);
-                    ResourceLocation resourceIdentifier = new ResourceLocation(namespace, resourceName);
+                    Identifier registryIdentifier = new Identifier(config.override.registry_namespace != null ? config.override.registry_namespace : "minecraft", path);
+                    Identifier resourceIdentifier = new Identifier(namespace, resourceName);
 
-                    key = ResourceKey.create(ResourceKey.createRegistryKey(registryIdentifier), resourceIdentifier);
+                    key = RegistryKey.of(RegistryKey.ofRegistry(registryIdentifier), resourceIdentifier);
                     name = key.toString();
                 }
 
@@ -282,10 +282,10 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                         Map<EntityType, BiFunction<Double, LocalRef<Entity>, Boolean>> checkMap = new HashMap<>();
 
                         for (GraceConfig.EntityConfig entityConfig : config.entities) {
-                            Tuple<EntityType<?>, BiFunction<Double, LocalRef<Entity>, Boolean>> currEntityCheck = ResourceReloader.makeEntityCheck(name, entityConfig);
+                            Pair<EntityType<?>, BiFunction<Double, LocalRef<Entity>, Boolean>> currEntityCheck = ResourceReloader.makeEntityCheck(name, entityConfig);
                             //append the new check in or with the previous ones
                             if (currEntityCheck != null)
-                                checkMap.put(currEntityCheck.getA(), currEntityCheck.getB());
+                                checkMap.put(currEntityCheck.getLeft(), currEntityCheck.getRight());
                         }
                         entityCheck = (r, ref) -> {
                             BiFunction<Double, LocalRef<Entity>, Boolean> func = checkMap.get(ref.get().getType());
@@ -303,10 +303,10 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
                         Map<Block, BiFunction<Double, LocalRef<BlockState>, Boolean>> checkMap = new HashMap<>();
                         //start with an always false check to fail in case of empty list
                         for (GraceConfig.BlockConfig blockConfig : config.blocks) {
-                            Tuple<Block, BiFunction<Double, LocalRef<BlockState>, Boolean>> currBlockCheck = ResourceReloader.makeBlockCheck(name, blockConfig);
+                            Pair<Block, BiFunction<Double, LocalRef<BlockState>, Boolean>> currBlockCheck = ResourceReloader.makeBlockCheck(name, blockConfig);
                             //append the new check in or with the previous ones
                             if (currBlockCheck != null)
-                                checkMap.put(currBlockCheck.getA(), currBlockCheck.getB());
+                                checkMap.put(currBlockCheck.getLeft(), currBlockCheck.getRight());
                         }
                         blockCheck = (r, ref) -> {
                             BiFunction<Double, LocalRef<BlockState>, Boolean> func = checkMap.get(ref.get().getBlock());
@@ -344,21 +344,21 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         }
 
         //get the json file in the spawn tree
-        List<Resource> spawnResources = manager.getResourceStack(SPAWN_IDENTIFIER);
+        List<Resource> spawnResources = manager.getAllResources(SPAWN_IDENTIFIER);
 
         //parse each json ( should be only one )
         for (Resource resource : spawnResources) {
-            try (Reader reader = resource.openAsReader()) {
+            try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
                 SpawnConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, SpawnConfig.class);
 
-                ResourceKey<Level> worldKey = null;
+                RegistryKey<World> worldKey = null;
                 BlockPos spawnPos = null;
 
                 if (config.worldKey != null) {
-                    ResourceLocation worldId = ResourceLocation.tryParse(config.worldKey);
+                    Identifier worldId = Identifier.tryParse(config.worldKey);
                     if (worldId != null) {
-                        worldKey = ResourceKey.create(Registries.DIMENSION, worldId);
+                        worldKey = RegistryKey.of(RegistryKeys.WORLD, worldId);
                     } else {
                         ProtoSkyMod.LOGGER.warn("Malformed spawn world string: {}", config.worldKey);
                     }
@@ -375,16 +375,16 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         }
 
         //get the json file in the world tree
-        List<Resource> worldResources = manager.getResourceStack(IGNORED_WORLDS_IDENTIFIER);
+        List<Resource> worldResources = manager.getAllResources(IGNORED_WORLDS_IDENTIFIER);
 
         //parse each json ( should be only one )
         for (Resource resource : worldResources) {
-            try (Reader reader = resource.openAsReader()) {
+            try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
                 String[] config = ProtoSkyMod.JSON_READER.fromJson(reader, String[].class);
 
                 for (String worldkey : config) {
-                    ProtoSkyMod.ignoredWorlds.add(ResourceKey.create(Registries.DIMENSION, ResourceLocation.tryParse(worldkey)));
+                    ProtoSkyMod.ignoredWorlds.add(RegistryKey.of(RegistryKeys.WORLD, Identifier.tryParse(worldkey)));
                 }
             } catch (Throwable t) {
                 ProtoSkyMod.LOGGER.error("Error occurred while loading debug resource json {}", IGNORED_WORLDS_IDENTIFIER.toString(), t);
@@ -392,18 +392,18 @@ public class ResourceReloader implements SimpleSynchronousResourceReloadListener
         }
 
         //get the json file in the debug tree
-        List<Resource> debugResources = manager.getResourceStack(DEBUG_IDENTIFIER);
+        List<Resource> debugResources = manager.getAllResources(DEBUG_IDENTIFIER);
 
         //parse each json ( should be only one )
         for (Resource resource : debugResources) {
-            try (Reader reader = resource.openAsReader()) {
+            try (Reader reader = resource.getReader()) {
                 // cast the json to the Config class
                 DebugConfig config = ProtoSkyMod.JSON_READER.fromJson(reader, DebugConfig.class);
 
                 if (config.chunkOriginBlock != null) {
-                    ResourceLocation id = ResourceLocation.tryParse(config.chunkOriginBlock);
-                    if (BuiltInRegistries.BLOCK.containsKey(id))
-                        Debug.chunkOriginBlock = BuiltInRegistries.BLOCK.get(id);
+                    Identifier id = Identifier.tryParse(config.chunkOriginBlock);
+                    if (Registries.BLOCK.containsId(id))
+                        Debug.chunkOriginBlock = Registries.BLOCK.get(id);
                     else
                         ProtoSkyMod.LOGGER.warn("Block {} for chunkOriginBlock is invalid", config.chunkOriginBlock);
                 }

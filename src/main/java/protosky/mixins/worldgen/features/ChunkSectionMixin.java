@@ -2,12 +2,12 @@ package protosky.mixins.worldgen.features;
 
 import com.llamalad7.mixinextras.sugar.Local;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
-import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.WorldGenRegion;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.ChunkRegion;
+import net.minecraft.util.math.random.Random;
+import net.minecraft.block.BlockState;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.ChunkSection;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -19,30 +19,30 @@ import protosky.interfaces.GenerationMaskHolder;
 import protosky.interfaces.GraceHolder;
 import protosky.interfaces.SectionOfChunk;
 
-@Mixin(LevelChunkSection.class)
-public class LevelChunkSectionMixin {
+@Mixin(ChunkSection.class)
+public class ChunkSectionMixin {
 
 
-    @Inject(method = "setBlockState(IIILnet/minecraft/world/level/block/state/BlockState;Z)Lnet/minecraft/world/level/block/state/BlockState;", at = @At(value = "HEAD"))
+    @Inject(method = "setBlockState(IIILnet/minecraft/block/BlockState;Z)Lnet/minecraft/block/BlockState;", at = @At(value = "HEAD"))
     private void checkSetBlock(CallbackInfoReturnable<BlockState> cir,
-                               @Local(argsOnly = true, name = "i") int x,
-                               @Local(argsOnly = true, name = "j") int y,
-                               @Local(argsOnly = true, name = "k") int z,
-                               @Local(argsOnly = true, name = "blockState") BlockState state,
-                               @Local(argsOnly = true, name = "blockState") LocalRef<BlockState> forced_state
+                               @Local(argsOnly = true, ordinal = 0) int x,
+                               @Local(argsOnly = true, ordinal = 1) int y,
+                               @Local(argsOnly = true, ordinal = 2) int z,
+                               @Local(argsOnly = true) BlockState state,
+                               @Local(argsOnly = true) LocalRef<BlockState> forced_state
     ) {
-        WorldGenRegion region = ThreadLocals.currentRegion.get();
+        ChunkRegion region = ThreadLocals.currentRegion.get();
         if (region != null) {
             GenerationMaskHolder holder = ((GenerationMaskHolder) region);
             FeatureWorldMask mask = holder.protoSky$getMask();
             if (mask != null) {
-                ChunkAccess chunk = ((SectionOfChunk) this).protoSky$getChunk();
+                Chunk chunk = ((SectionOfChunk) this).protoSky$getChunk();
                 int y_offset = ((SectionOfChunk) this).protoSky$getYOffset();
-                BlockPos pos = chunk.getPos().getBlockAt(x, y + y_offset, z);
-                RandomSource random = ThreadLocals.graceRandom.get();
+                BlockPos pos = chunk.getPos().getBlockPos(x, y + y_offset, z);
+                Random random = ThreadLocals.graceRandom.get();
                 if (random == null) {
                     ProtoSkyMod.LOGGER.warn("Missing random while placing block {} ({},{},{})", state.toString(), pos.getX(), pos.getY(), pos.getZ());
-                    random = RandomSource.createNewThreadLocalInstance();
+                    random = Random.createLocal();
                 }
                 if (mask.canPlace(forced_state, random.nextDouble())) {
                     ((GraceHolder) chunk).protoSky$putGracedBlock(pos, forced_state.get());

@@ -2,7 +2,6 @@
   "schemaVersion": 1,
   "id": "protosky",
   "version": "${version}",
-
   "name": "ProtoSky",
   "description": "ProtoSky skyblock mod!",
   "authors": [
@@ -14,7 +13,6 @@
     "homepage": "",
     "sources": ""
   },
-
   "license": "MIT",
   "icon": "assets/protosky/protoIcon.png",
   "environment": "*",

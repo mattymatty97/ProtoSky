@@ -1,10 +1,10 @@
 package protosky.mixins.worldgen.features;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.entity.Entity;
+import net.minecraft.block.BlockState;
+import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,13 +18,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Mixin(ChunkAccess.class)
-public abstract class ChunkAccessMixin implements GraceHolder {
+@Mixin(Chunk.class)
+public abstract class ChunkMixin implements GraceHolder {
     @Unique
     private Map<BlockPos, BlockState> gracedBlockStates;
 
     @Unique
-    private Set<CompoundTag> gracedEntities;
+    private Set<NbtCompound> gracedEntities;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void init(CallbackInfo ci) {
@@ -40,20 +40,20 @@ public abstract class ChunkAccessMixin implements GraceHolder {
     @Override
     public void protoSky$putGracedBlock(BlockPos pos, BlockState state) {
         if (state != null)
-            gracedBlockStates.put(pos.immutable(), state);
+            gracedBlockStates.put(pos.toImmutable(), state);
         else
-            gracedBlockStates.remove(pos.immutable());
+            gracedBlockStates.remove(pos.toImmutable());
     }
 
     @Override
-    public Set<CompoundTag> protoSky$getGracedEntities() {
+    public Set<NbtCompound> protoSky$getGracedEntities() {
         return gracedEntities;
     }
 
     @Override
     public void protoSky$putGracedEntity(Entity entity) {
-        CompoundTag entity_nbt = new CompoundTag();
-        if (entity.save(entity_nbt))
+        NbtCompound entity_nbt = new NbtCompound();
+        if (entity.saveNbt(entity_nbt))
             gracedEntities.add(entity_nbt);
     }
 }

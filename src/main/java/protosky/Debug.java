@@ -1,7 +1,7 @@
 package protosky;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.Block;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.block.Block;
 
 import java.util.*;
 

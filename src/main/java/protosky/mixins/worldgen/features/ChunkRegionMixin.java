@@ -2,19 +2,19 @@ package protosky.mixins.worldgen.features;
 
 import com.llamalad7.mixinextras.sugar.Local;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
-import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.WorldGenRegion;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.LevelReader;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.levelgen.LegacyRandomSource;
-import net.minecraft.world.level.levelgen.WorldgenRandom;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.ChunkRegion;
+import net.minecraft.util.math.random.Random;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.WorldView;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.BlockState;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.util.math.random.CheckedRandom;
+import net.minecraft.util.math.random.ChunkRandom;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -35,24 +35,24 @@ import java.util.LinkedList;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@Mixin(WorldGenRegion.class)
-public abstract class WorldGenRegionMixin implements GenerationMaskHolder {
+@Mixin(ChunkRegion.class)
+public abstract class ChunkRegionMixin implements GenerationMaskHolder {
     @Shadow
-    public abstract boolean setBlock(BlockPos pos, BlockState state, int flags, int maxUpdateDepth);
+    public abstract boolean setBlockState(BlockPos pos, BlockState state, int flags, int maxUpdateDepth);
 
     @Shadow
     public abstract long getSeed();
 
     @Shadow
-    public abstract ChunkPos getCenter();
+    public abstract ChunkPos getCenterPos();
 
     @Shadow
-    public abstract ServerLevel getLevel();
+    public abstract ServerWorld toServerWorld();
 
     @Unique
     private LinkedList<FeatureWorldMask> masks;
     @Unique
-    private LinkedList<ResourceKey<?>[]> maskReferences;
+    private LinkedList<RegistryKey<?>[]> maskReferences;
     @Unique
     private LinkedList<BlockPos> maskOrigins;
 
@@ -67,43 +67,43 @@ public abstract class WorldGenRegionMixin implements GenerationMaskHolder {
         blocks_to_rollback = new HashSet<>();
     }
 
-    @Inject(method = "setBlock", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/WorldGenRegion;getChunk(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/chunk/ChunkAccess;", shift = At.Shift.BEFORE))
+    @Inject(method = "setBlockState", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/ChunkRegion;getChunk(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/world/chunk/Chunk;", shift = At.Shift.BEFORE))
     private void checkSetBlock(CallbackInfoReturnable<Boolean> cir,
-                               @Local(argsOnly = true, name = "blockPos") BlockPos pos,
-                               @Local(argsOnly = true, name = "blockState") BlockState state,
-                               @Local(argsOnly = true, name = "blockState") LocalRef<BlockState> forced_state
+                               @Local(argsOnly = true) BlockPos pos,
+                               @Local(argsOnly = true) BlockState state,
+                               @Local(argsOnly = true) LocalRef<BlockState> forced_state
     ) {
         FeatureWorldMask mask = this.protoSky$getMask();
         if (mask != null) {
-            ChunkAccess chunk = ((LevelReader) this).getChunk(pos);
-            RandomSource random = ThreadLocals.graceRandom.get();
+            Chunk chunk = ((WorldView) this).getChunk(pos);
+            Random random = ThreadLocals.graceRandom.get();
             if (random == null) {
                 ProtoSkyMod.LOGGER.warn("Missing random while placing block {} ({},{},{})", state.toString(), pos.getX(), pos.getY(), pos.getZ());
-                random = RandomSource.createNewThreadLocalInstance();
+                random = Random.createLocal();
             }
             if (mask.canPlace(forced_state, random.nextDouble())) {
                 ((GraceHolder) chunk).protoSky$putGracedBlock(pos, forced_state.get());
-                this.protoSky$updateRollbacks(pos.immutable(), true);
+                this.protoSky$updateRollbacks(pos.toImmutable(), true);
                 return;
             } else {
                 if (((GraceHolder) chunk).protoSky$getGracedBlocks().get(pos) != null)
                     ((GraceHolder) chunk).protoSky$putGracedBlock(pos, null);
             }
-            this.protoSky$updateRollbacks(pos.immutable(), false);
+            this.protoSky$updateRollbacks(pos.toImmutable(), false);
         }
     }
 
-    @Inject(method = "addFreshEntity", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "spawnEntity", at = @At("HEAD"), cancellable = true)
     private void checkSpawnEntity(CallbackInfoReturnable<Boolean> cir,
-                                  @Local(argsOnly = true, name = "entity") Entity entity,
-                                  @Local(argsOnly = true, name = "entity") LocalRef<Entity> forced_entity) {
+                                  @Local(argsOnly = true) Entity entity,
+                                  @Local(argsOnly = true) LocalRef<Entity> forced_entity) {
         FeatureWorldMask mask = this.protoSky$getMask();
         if (mask != null) {
-            ChunkAccess chunk = ((LevelReader) this).getChunk(entity.blockPosition());
-            RandomSource random = ThreadLocals.graceRandom.get();
+            Chunk chunk = ((WorldView) this).getChunk(entity.getBlockPos());
+            Random random = ThreadLocals.graceRandom.get();
             if (random == null) {
                 ProtoSkyMod.LOGGER.warn("Missing random while spawning entity {} ({},{},{})", entity.toString(), entity.getX(), entity.getY(), entity.getZ());
-                random = RandomSource.createNewThreadLocalInstance();
+                random = Random.createLocal();
             }
             if (mask.canSpawn(forced_entity, random.nextDouble())) {
                 ((GraceHolder) chunk).protoSky$putGracedEntity(forced_entity.get());
@@ -122,26 +122,26 @@ public abstract class WorldGenRegionMixin implements GenerationMaskHolder {
     @Override
     public void protoSky$updateRollbacks(BlockPos pos, boolean remove) {
         if (remove) {
-            blocks_to_rollback.remove(pos.immutable());
+            blocks_to_rollback.remove(pos.toImmutable());
         } else {
-            blocks_to_rollback.add(pos.immutable());
+            blocks_to_rollback.add(pos.toImmutable());
         }
     }
 
     @Override
-    public void protoSky$setMask(ResourceKey<?>[] keys, BlockPos origin) {
+    public void protoSky$setMask(RegistryKey<?>[] keys, BlockPos origin) {
         if (keys != null && keys.length > 0 && origin != null &&
-                !ProtoSkyMod.ignoredWorlds.contains(this.getLevel().dimension())) {
+                !ProtoSkyMod.ignoredWorlds.contains(this.toServerWorld().getRegistryKey())) {
             FeatureWorldMask currMask = this.masks.peek();
             if (currMask == null || currMask.isReplaceable()) {
 
-                WorldgenRandom structureRandom = new WorldgenRandom(new LegacyRandomSource(0L));
-                structureRandom.setLargeFeatureSeed(this.getSeed(), origin.getX(), origin.getZ());
+                ChunkRandom structureRandom = new ChunkRandom(new CheckedRandom(0L));
+                structureRandom.setCarverSeed(this.getSeed(), origin.getX(), origin.getZ());
                 FeatureWorldMask foundMask = ProtoSkyMod.DEFAULT_MASK;
 
                 {
                     FeatureWorldMask tmpMask;
-                    for (ResourceKey<?> name : keys) {
+                    for (RegistryKey<?> name : keys) {
                         tmpMask = ProtoSkyMod.baked_masks.getOrDefault(name, ProtoSkyMod.DEFAULT_MASK);
                         if (tmpMask != ProtoSkyMod.DEFAULT_MASK && foundMask.isReplaceable()) {
                             foundMask = tmpMask;
@@ -161,25 +161,25 @@ public abstract class WorldGenRegionMixin implements GenerationMaskHolder {
                 this.masks.addLast(currMask);
             }
 
-            this.maskOrigins.addLast(origin.immutable());
+            this.maskOrigins.addLast(origin.toImmutable());
             this.maskReferences.addLast(keys);
         } else {
             this.masks.clear();
             this.maskReferences.clear();
             this.maskOrigins.clear();
-            ChunkPos chunkPos = this.getCenter();
+            ChunkPos chunkPos = this.getCenterPos();
             for (BlockPos blockPos : blocks_to_rollback) {
                 if (!chunkPos.equals(new ChunkPos(blockPos)))
-                    this.setBlock(blockPos, Blocks.AIR.defaultBlockState(), 0, 0);
+                    this.setBlockState(blockPos, Blocks.AIR.getDefaultState(), 0, 0);
             }
             blocks_to_rollback.clear();
         }
     }
 
     @Override
-    public void protoSky$unsetMask(ResourceKey<?>[] keys, BlockPos origin) {
+    public void protoSky$unsetMask(RegistryKey<?>[] keys, BlockPos origin) {
         if (keys != null && keys.length > 0 && origin != null &&
-                !ProtoSkyMod.ignoredWorlds.contains(this.getLevel().dimension())) {
+                !ProtoSkyMod.ignoredWorlds.contains(this.toServerWorld().getRegistryKey())) {
             this.maskOrigins.pollLast();
             this.maskReferences.pollLast();
             this.masks.pollLast();
@@ -193,7 +193,7 @@ public abstract class WorldGenRegionMixin implements GenerationMaskHolder {
             if (mask != null) {
 
                 Debug.AttemptCounter counter = null;
-                ResourceKey<?> logKey = null;
+                RegistryKey<?> logKey = null;
                 int index = -1;
 
                 if (Debug.anyAttempt) {
@@ -202,9 +202,9 @@ public abstract class WorldGenRegionMixin implements GenerationMaskHolder {
                     counter = Debug.attemptMap.computeIfAbsent(logKey.toString(), (i) -> new Debug.AttemptCounter());
                     index = 0;
                 } else if (!Debug.attemptMap.isEmpty()) {
-                    for (ResourceKey<?>[] keys : this.maskReferences) {
+                    for (RegistryKey<?>[] keys : this.maskReferences) {
                         index++;
-                        for (ResourceKey<?> key : keys) {
+                        for (RegistryKey<?> key : keys) {
                             counter = Debug.attemptMap.get(key.toString());
                             if (counter != null) {
                                 logKey = key;
@@ -238,7 +238,7 @@ public abstract class WorldGenRegionMixin implements GenerationMaskHolder {
                     BlockPos origin = this.maskOrigins.peekLast();
                     assert origin != null;
 
-                    ChunkPos center = this.getCenter();
+                    ChunkPos center = this.getCenterPos();
                     if (!isSubset) {
                         ProtoSkyMod.LOGGER.warn(
                                 "ChunkRegion ({} {}) attempted to generate {} at [{} {} {}]| wasGenerated={}, wasGraced={}| total={}, graced={}, vanilla={}, generated={}",

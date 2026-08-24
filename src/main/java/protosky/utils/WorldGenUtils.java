@@ -1,26 +1,25 @@
 package protosky.utils;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.*;
-import net.minecraft.world.level.levelgen.BelowZeroRetrogen;
-import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.entity.EntityType;
+import net.minecraft.world.biome.Biome;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.BlockState;
+import net.minecraft.world.chunk.*;
+import net.minecraft.world.chunk.ProtoChunk;
+import net.minecraft.world.Heightmap;
 import protosky.Debug;
 import protosky.ProtoSkyMod;
 import protosky.interfaces.GraceHolder;
 import protosky.interfaces.RetrogenHolder;
 
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
@@ -35,30 +34,30 @@ public class WorldGenUtils {
      * @param chunk the chunk to clear
      * @param world the world the chunk belongs to
      */
-    public static void deleteBlocks(ChunkAccess chunk, ServerLevel world) {
+    public static void deleteBlocks(Chunk chunk, ServerWorld world) {
         //fixes for RetroGen
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = old_status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
         //This loops through all sections (16x16x16) sections of a chunk and copies over the biome information, but not the blocks.
-        LevelChunkSection[] sections = chunk.getSections();
+        ChunkSection[] sections = chunk.getSectionArray();
         Map<BlockPos, BlockState> gracedBlocks = ((GraceHolder) chunk).protoSky$getGracedBlocks();
         for (int i = 0; i < sections.length; i++) {
             //avoid deleting blocks from pre 1.18 chunks
-            if (had_retrogen && BelowZeroRetrogen.UPGRADE_HEIGHT_ACCESSOR.isOutsideBuildHeight(chunk.getSectionYFromSectionIndex(i)))
+            if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(chunk.sectionIndexToCoord(i)))
                 continue;
 
             //clear the chunk
-            LevelChunkSection chunkSection = sections[i];
-            PalettedContainer<BlockState> blockStateContainer = new PalettedContainer<>(Block.BLOCK_STATE_REGISTRY, Blocks.AIR.defaultBlockState(), PalettedContainer.Strategy.SECTION_STATES);
+            ChunkSection chunkSection = sections[i];
+            PalettedContainer<BlockState> blockStateContainer = new PalettedContainer<>(Block.STATE_IDS, Blocks.AIR.getDefaultState(), PalettedContainer.PaletteProvider.BLOCK_STATE);
 
-            PalettedContainerRO<Holder<Biome>> biomeContainer = chunkSection.getBiomes();
-            sections[i] = new LevelChunkSection(blockStateContainer, biomeContainer);
+            ReadableContainer<RegistryEntry<Biome>> biomeContainer = chunkSection.getBiomeContainer();
+            sections[i] = new ChunkSection(blockStateContainer, biomeContainer);
         }
 
         //This removes all the block entities
-        for (BlockPos bePos : chunk.getBlockEntitiesPos()) {
+        for (BlockPos bePos : chunk.getBlockEntityPositions()) {
             //avoid deleting blocks from pre 1.18 chunks
-            if (had_retrogen && BelowZeroRetrogen.UPGRADE_HEIGHT_ACCESSOR.isOutsideBuildHeight(bePos.getY()))
+            if (had_retrogen && BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(bePos.getY()))
                 continue;
             //avoid deleting blockEntities that have been graced
             if (!gracedBlocks.containsKey(bePos))
@@ -72,25 +71,23 @@ public class WorldGenUtils {
      *
      * @param chunk the chunk to edit
      */
-    public static void fillCustomHeightmaps(ChunkAccess chunk) {
+    public static void fillCustomHeightmaps(Chunk chunk) {
         //fixes for RetroGen
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = old_status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
 
         //keep old heightmaps if we had retrogen
         if (had_retrogen)
             return;
 
-        if (chunk.hasPrimedHeightmap(Heightmap.Types.WORLD_SURFACE))
-        {
-            Heightmap current = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE);
-            chunk.setHeightmap(Heightmap.Types.PROTO_SKY_VANILLA_WORLD_SURFACE, current.getRawData());
+        if (chunk.hasHeightmap(Heightmap.Type.WORLD_SURFACE)) {
+            Heightmap current = chunk.getHeightmap(Heightmap.Type.WORLD_SURFACE);
+            chunk.setHeightmap(Heightmap.Type.PROTO_SKY_VANILLA_WORLD_SURFACE, current.asLongArray());
         }
 
-        if (chunk.hasPrimedHeightmap(Heightmap.Types.OCEAN_FLOOR))
-        {
-            Heightmap current = chunk.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR);
-            chunk.setHeightmap(Heightmap.Types.PROTO_SKY_VANILLA_OCEAN_FLOOR, current.getRawData());
+        if (chunk.hasHeightmap(Heightmap.Type.OCEAN_FLOOR)) {
+            Heightmap current = chunk.getHeightmap(Heightmap.Type.OCEAN_FLOOR);
+            chunk.setHeightmap(Heightmap.Type.PROTO_SKY_VANILLA_OCEAN_FLOOR, current.asLongArray());
         }
     }
 
@@ -99,22 +96,22 @@ public class WorldGenUtils {
      *
      * @param chunk the chunk to edit
      */
-    public static void resetHeightMaps(ChunkAccess chunk) {
+    public static void resetHeightMaps(Chunk chunk) {
         //fixes for RetroGen
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = old_status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
 
         //keep old heightmaps if we had retrogen
         if (had_retrogen)
             return;
 
         //empty the heightmaps, they will be filled again when the graced blocks are restored
-        for (Heightmap.Types type : ChunkStatus.POST_FEATURES) {
+        for (Heightmap.Type type : ChunkStatus.POST_CARVER_HEIGHTMAPS) {
             if (ProtoSkyMod.CUSTOM_HEIGHTMAPS.contains(type))
                 continue;
 
-            Heightmap map = chunk.getOrCreateHeightmapUnprimed(type);
-            chunk.setHeightmap(type, new long[map.getRawData().length]);
+            Heightmap map = chunk.getHeightmap(type);
+            chunk.setHeightmap(type, new long[map.asLongArray().length]);
         }
     }
 
@@ -125,18 +122,18 @@ public class WorldGenUtils {
      * @param chunk the chunk to clear
      * @param world the world the chunk belongs to
      */
-    public static void clearEntities(ProtoChunk chunk, ServerLevel world) {
+    public static void clearEntities(ProtoChunk chunk, ServerWorld world) {
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = old_status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
 
         if (had_retrogen) {
             //erase only entities below y0
-            Iterator<CompoundTag> entityIterator = chunk.getEntities().iterator();
+            Iterator<NbtCompound> entityIterator = chunk.getEntities().iterator();
             while (entityIterator.hasNext()) {
-                CompoundTag entity_nbt = entityIterator.next();
-                ListTag entity_pos_list = entity_nbt.getList("Pos", Tag.TAG_DOUBLE);
-                BlockPos entity_pos = new BlockPos(Mth.floor(entity_pos_list.getDouble(0)), Mth.floor(entity_pos_list.getDouble(1)), Mth.floor(entity_pos_list.getDouble(2)));
-                if (!BelowZeroRetrogen.UPGRADE_HEIGHT_ACCESSOR.isOutsideBuildHeight(entity_pos))
+                NbtCompound entity_nbt = entityIterator.next();
+                NbtList entity_pos_list = entity_nbt.getList("Pos", NbtElement.DOUBLE_TYPE);
+                BlockPos entity_pos = new BlockPos(MathHelper.floor(entity_pos_list.getDouble(0)), MathHelper.floor(entity_pos_list.getDouble(1)), MathHelper.floor(entity_pos_list.getDouble(2)));
+                if (!BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(entity_pos))
                     entityIterator.remove();
             }
         } else {
@@ -153,18 +150,18 @@ public class WorldGenUtils {
      * @param chunk the chunk to edit
      * @param world the world the chunk belongs to
      */
-    public static void restoreBlocks(ChunkAccess chunk, ServerLevel world) {
+    public static void restoreBlocks(Chunk chunk, ServerWorld world) {
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = old_status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
 
         Map<BlockPos, BlockState> gracedBlocks = ((GraceHolder) chunk).protoSky$getGracedBlocks();
 
         if (Debug.chunkOriginBlock != null) {
-            gracedBlocks.put(chunk.getPos().getWorldPosition(), Debug.chunkOriginBlock.defaultBlockState());
+            gracedBlocks.put(chunk.getPos().getStartPos(), Debug.chunkOriginBlock.getDefaultState());
         }
 
         gracedBlocks.forEach((blockPos, blockState) -> {
-            if (!had_retrogen || !BelowZeroRetrogen.UPGRADE_HEIGHT_ACCESSOR.isOutsideBuildHeight(blockPos)) {
+            if (!had_retrogen || !BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(blockPos)) {
                 chunk.setBlockState(blockPos, blockState, false);
             }
         });
@@ -177,24 +174,24 @@ public class WorldGenUtils {
      * @param chunk the chunk to edit
      * @param world the world the chunk belongs to
      */
-    public static void restoreEntities(ProtoChunk chunk, ServerLevel world) {
+    public static void restoreEntities(ProtoChunk chunk, ServerWorld world) {
         ChunkStatus old_status = ((RetrogenHolder) chunk).protoSky$getPreviousStatus();
-        boolean had_retrogen = old_status.isOrAfter(ChunkStatus.INITIALIZE_LIGHT);
+        boolean had_retrogen = old_status.isAtLeast(ChunkStatus.INITIALIZE_LIGHT);
 
-        Set<CompoundTag> gracedEntities = ((GraceHolder) chunk).protoSky$getGracedEntities();
+        Set<NbtCompound> gracedEntities = ((GraceHolder) chunk).protoSky$getGracedEntities();
 
-        Stream<CompoundTag> entity_stream = gracedEntities.stream();
+        Stream<NbtCompound> entity_stream = gracedEntities.stream();
 
         if (had_retrogen) {
             //filter out entities above y0
             entity_stream = entity_stream.filter(entity_nbt -> {
-                ListTag entity_pos_list = entity_nbt.getList("Pos", Tag.TAG_DOUBLE);
-                BlockPos entity_pos = new BlockPos(Mth.floor(entity_pos_list.getDouble(0)), Mth.floor(entity_pos_list.getDouble(1)), Mth.floor(entity_pos_list.getDouble(2)));
-                return !BelowZeroRetrogen.UPGRADE_HEIGHT_ACCESSOR.isOutsideBuildHeight(entity_pos);
+                NbtList entity_pos_list = entity_nbt.getList("Pos", NbtElement.DOUBLE_TYPE);
+                BlockPos entity_pos = new BlockPos(MathHelper.floor(entity_pos_list.getDouble(0)), MathHelper.floor(entity_pos_list.getDouble(1)), MathHelper.floor(entity_pos_list.getDouble(2)));
+                return !BelowZeroRetrogen.BELOW_ZERO_VIEW.isOutOfHeightLimit(entity_pos);
             });
         }
 
-        EntityType.loadEntitiesRecursive(entity_stream.toList(), world).forEach(world::addFreshEntity);
+        EntityType.streamFromNbt(entity_stream.toList(), world).forEach(world::spawnEntity);
 
     }
 }

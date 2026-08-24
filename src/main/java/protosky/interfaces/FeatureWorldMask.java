@@ -1,8 +1,8 @@
 package protosky.interfaces;
 
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.entity.Entity;
+import net.minecraft.block.BlockState;
 
 public interface FeatureWorldMask {
     default boolean canGenerate(Double value) {

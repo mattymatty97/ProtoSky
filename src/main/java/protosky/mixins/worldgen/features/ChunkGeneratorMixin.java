@@ -5,16 +5,16 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.llamalad7.mixinextras.sugar.Share;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
-import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.WorldGenRegion;
-import net.minecraft.world.level.WorldGenLevel;
-import net.minecraft.world.level.chunk.ChunkGenerator;
-import net.minecraft.world.level.levelgen.WorldgenRandom;
-import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.world.ChunkRegion;
+import net.minecraft.world.StructureWorldAccess;
+import net.minecraft.world.gen.chunk.ChunkGenerator;
+import net.minecraft.util.math.random.ChunkRandom;
+import net.minecraft.util.math.random.Xoroshiro128PlusPlusRandom;
+import net.minecraft.util.math.BlockBox;
+import net.minecraft.world.gen.structure.Structure;
+import net.minecraft.structure.StructureStart;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -29,48 +29,48 @@ import java.util.Optional;
 @Mixin(ChunkGenerator.class)
 public abstract class ChunkGeneratorMixin {
 
-    @Inject(method = "applyBiomeDecoration", at = @At("HEAD"))
-    public void setThreadLocals(CallbackInfo ci, @Local(argsOnly = true) WorldGenLevel world) {
-        ThreadLocals.currentRegion.set((WorldGenRegion) world);
+    @Inject(method = "generateFeatures", at = @At("HEAD"))
+    public void setThreadLocals(CallbackInfo ci, @Local(argsOnly = true) StructureWorldAccess world) {
+        ThreadLocals.currentRegion.set((ChunkRegion) world);
     }
 
 
-    @WrapOperation(method = "applyBiomeDecoration", at = @At(value = "NEW", target = "(J)Lnet/minecraft/world/level/levelgen/XoroshiroRandomSource;"))
-    public XoroshiroRandomSource initGraceRandom(long seed, Operation<XoroshiroRandomSource> original,
-                                                 @Share("graceRandom") LocalRef<WorldgenRandom> graceRandom
+    @WrapOperation(method = "generateFeatures", at = @At(value = "NEW", target = "(J)Lnet/minecraft/util/math/random/Xoroshiro128PlusPlusRandom;"))
+    public Xoroshiro128PlusPlusRandom initGraceRandom(long seed, Operation<Xoroshiro128PlusPlusRandom> original,
+                                                      @Share("graceRandom") LocalRef<ChunkRandom> graceRandom
     ) {
-        graceRandom.set(new WorldgenRandom(original.call(seed)));
+        graceRandom.set(new ChunkRandom(original.call(seed)));
         return original.call(seed);
     }
 
-    @WrapOperation(method = "applyBiomeDecoration", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/levelgen/WorldgenRandom;setDecorationSeed(JII)J"))
-    public long initGraceRandom(WorldgenRandom instance, long worldSeed, int blockX, int blockZ, Operation<Long> original,
-                                @Share("graceRandom") LocalRef<WorldgenRandom> graceRandom
+    @WrapOperation(method = "generateFeatures", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/random/ChunkRandom;setPopulationSeed(JII)J"))
+    public long initGraceRandom(ChunkRandom instance, long worldSeed, int blockX, int blockZ, Operation<Long> original,
+                                @Share("graceRandom") LocalRef<ChunkRandom> graceRandom
     ) {
         original.call(graceRandom.get(), worldSeed, blockX, blockZ);
         return original.call(instance, worldSeed, blockX, blockZ);
     }
 
-    @Inject(method = "applyBiomeDecoration", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/StructureManager;startsForStructure(Lnet/minecraft/core/SectionPos;Lnet/minecraft/world/level/levelgen/structure/Structure;)Ljava/util/List;"))
-    private void trackStructure(CallbackInfo ci, @Local(name = "structure") Structure structure) {
+    @Inject(method = "generateFeatures", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/gen/StructureAccessor;getStructureStarts(Lnet/minecraft/util/math/ChunkSectionPos;Lnet/minecraft/world/gen/structure/Structure;)Ljava/util/List;"))
+    private void trackStructure(CallbackInfo ci, @Local Structure structure) {
         ThreadLocals.currentStructure.get().add(structure);
     }
 
     @Inject(method = "method_38265", at = @At(value = "HEAD"))
     public void updateStructureMask(CallbackInfo ci,
-                                    @Local(argsOnly = true, name = "worldGenLevel") WorldGenLevel structureWorldAccess,
-                                    @Local(argsOnly = true, name = "structureStart") StructureStart start,
+                                    @Local(argsOnly = true) StructureWorldAccess structureWorldAccess,
+                                    @Local(argsOnly = true) StructureStart start,
                                     @Share("origin") LocalRef<BlockPos> origin,
-                                    @Share("names") LocalRef<ResourceKey<?>[]> names
+                                    @Share("names") LocalRef<RegistryKey<?>[]> names
     ) {
         if (structureWorldAccess instanceof GenerationMaskHolder holder) {
-            BoundingBox bbox = start.getPieces().get(0).getBoundingBox();
+            BlockBox bbox = start.getChildren().get(0).getBoundingBox();
             BlockPos blockPos = bbox.getCenter();
-            Optional<ResourceKey<Structure>> structureKey = ProtoSkyMod.getStructureRegistry(structureWorldAccess)
-                    .getResourceKey(ThreadLocals.currentStructure.get().peek());
-            ArrayList<ResourceKey<?>> list = new ArrayList<>();
+            Optional<RegistryKey<Structure>> structureKey = ProtoSkyMod.getStructureRegistry(structureWorldAccess)
+                    .getKey(ThreadLocals.currentStructure.get().peek());
+            ArrayList<RegistryKey<?>> list = new ArrayList<>();
             structureKey.ifPresent(list::add);
-            names.set(list.toArray(new ResourceKey[0]));
+            names.set(list.toArray(new RegistryKey[0]));
             holder.protoSky$setMask(names.get(), blockPos);
             origin.set(blockPos);
         }
@@ -78,9 +78,9 @@ public abstract class ChunkGeneratorMixin {
 
     @Inject(method = "method_38265", at = @At(value = "RETURN"))
     public void clearStructureMask(CallbackInfo ci,
-                                   @Local(argsOnly = true, name = "worldGenLevel") WorldGenLevel structureWorldAccess,
+                                   @Local(argsOnly = true) StructureWorldAccess structureWorldAccess,
                                    @Share("origin") LocalRef<BlockPos> origin,
-                                   @Share("names") LocalRef<ResourceKey<?>[]> names
+                                   @Share("names") LocalRef<RegistryKey<?>[]> names
     ) {
         if (structureWorldAccess instanceof GenerationMaskHolder holder) {
 
@@ -90,14 +90,14 @@ public abstract class ChunkGeneratorMixin {
         }
     }
 
-    @Inject(method = "applyBiomeDecoration", at = @At(value = "INVOKE", target = "Ljava/util/List;forEach(Ljava/util/function/Consumer;)V", shift = At.Shift.AFTER))
+    @Inject(method = "generateFeatures", at = @At(value = "INVOKE", target = "Ljava/util/List;forEach(Ljava/util/function/Consumer;)V", shift = At.Shift.AFTER))
     private void clearTrackedStructure(CallbackInfo ci) {
         ThreadLocals.currentStructure.get().poll();
     }
 
-    @WrapOperation(method = "applyBiomeDecoration", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/levelgen/WorldgenRandom;setFeatureSeed(JII)V"))
-    public void setDecorationGraceRandom(WorldgenRandom instance, long populationSeed, int index, int step, Operation<Void> original,
-                                         @Share("graceRandom") LocalRef<WorldgenRandom> graceRandom
+    @WrapOperation(method = "generateFeatures", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/random/ChunkRandom;setDecoratorSeed(JII)V"))
+    public void setDecorationGraceRandom(ChunkRandom instance, long populationSeed, int index, int step, Operation<Void> original,
+                                         @Share("graceRandom") LocalRef<ChunkRandom> graceRandom
 
     ) {
         original.call(graceRandom.get(), populationSeed, index, step);
@@ -105,9 +105,8 @@ public abstract class ChunkGeneratorMixin {
         ThreadLocals.graceRandom.set(graceRandom.get());
     }
 
-    @Inject(method = "applyBiomeDecoration", at = @At("RETURN"))
-    public void unsetGraceRandoms(CallbackInfo ci,
-                                  @Local(argsOnly = true, name = "worldGenLevel") WorldGenLevel world) {
+    @Inject(method = "generateFeatures", at = @At("RETURN"))
+    public void unsetGraceRandoms(CallbackInfo ci, @Local(argsOnly = true) StructureWorldAccess world) {
         ThreadLocals.graceRandom.remove();
         ThreadLocals.currentRegion.remove();
         if (world instanceof GenerationMaskHolder holder) {
